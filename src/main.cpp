@@ -8,8 +8,6 @@
 // ============================================================================
 // CONFIGURAÇÕES DO DISPLAY LCD I2C
 // ============================================================================
-// Endereço I2C padrão costuma ser 0x27 ou 0x3F. Ajuste se necessário.
-// Define um LCD com 20 colunas e 4 linhas (ou 16 colunas e 2 linhas)
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 
 // ============================================================================
@@ -39,8 +37,9 @@ const int PINS_LEDS[4] = {18, 19, 21, 23};
 int vidas = 3;
 int pinoAtual = -1;
 int indicePadAtual = -1;
-unsigned long tempoDeAtivacao = 3000; // Tempo limite para acerto (3 segundos/3000ms)
+unsigned long tempoDeAtivacao = 3000; // Janela limite de tempo (3 segundos/3000ms)
 unsigned long instanteAtivacaoPad = 0;
+bool padAguardandoToque = false;      // Flag para controlar a janela ativa do toque
 
 float tempoDeResposta = 0.0;
 float somaTemposResposta = 0.0;
@@ -112,18 +111,17 @@ void selecionarDificuldadeComContagem() {
         lcd.print(x);
         lcd.print("s");
 
-        // Verifica durante a contagem se o botão foi pressionado
         unsigned long tempoInicioSegundo = millis();
         while (millis() - tempoInicioSegundo < 1000) {
             if (digitalRead(BOTAO_DIFICULDADE) == LOW) {
                 modoDificuldade = 1; // Difícil
                 lcd.clear();
                 lcd.setCursor(0, 0);
-                lcd.print("MODO DIFIL");
+                lcd.print("MODO DIFICIL");
                 lcd.setCursor(0, 1);
                 lcd.print("SELECIONADO!");
                 delay(1000);
-                x = 0; // Quebra a contagem regressiva
+                x = 0; // Encerra a contagem
                 break;
             }
             delay(50);
@@ -145,8 +143,7 @@ void selecionarDificuldadeComContagem() {
     delay(1000);
 
     jogoAtivo = true;
-    myDFPlayer.playFolder(1, 1); // Toca a primeira faixa da pasta /01
-    instanteAtivacaoPad = millis();
+    myDFPlayer.playFolder(1, 1); // Toca a música principal (Pasta 01, Faixa 001)
     ativarPadding();
 }
 
@@ -157,31 +154,26 @@ void selecionarDificuldadeComContagem() {
 void setup() {
     Serial.begin(115200);
 
-    // Inicialização do LCD
     Wire.begin();
     lcd.init();
     lcd.backlight();
 
-    // Configuração dos pinos dos botões de controle
     pinMode(BOTAO_DIFICULDADE, INPUT_PULLUP);
     pinMode(BOTAO_START, INPUT_PULLUP);
     pinMode(BOTAO_RESET, INPUT_PULLUP);
     pinMode(BOTAO_SAIR, INPUT_PULLUP);
 
-    // Configuração dos pinos dos pads/botões e LEDs de iluminação
     for (int i = 0; i < 4; i++) {
         pinMode(PINS_PADS[i], INPUT_PULLUP);
         pinMode(PINS_LEDS[i], OUTPUT);
-        digitalWrite(PINS_LEDS[i], LOW); // Desligados por padrão
+        digitalWrite(PINS_LEDS[i], LOW);
     }
 
-    // Comunicação com DFPlayer Mini
     mySoftwareSerial.begin(9600, SERIAL_8N1, DFPLAYER_RX, DFPLAYER_TX);
     if (myDFPlayer.begin(mySoftwareSerial)) {
         myDFPlayer.volume(20);
     }
 
-    // Executa as mensagens de carregamento no LCD
     animacaoInicializacaoLCD();
 }
 
@@ -201,9 +193,9 @@ void reset() {
     pontuacaoTotal = 0.0;
     pinoAtual = -1;
     indicePadAtual = -1;
+    padAguardandoToque = false;
     jogoAtivo = false;
     
-    // Desliga todos os LEDs
     for (int i = 0; i < 4; i++) {
         digitalWrite(PINS_LEDS[i], LOW);
     }
@@ -218,15 +210,14 @@ void reset() {
 void encerrar() {
     jogoAtivo = false;
     pinoAtual = -1;
+    padAguardandoToque = false;
 
-    // Desliga todos os LEDs
     for (int i = 0; i < 4; i++) {
         digitalWrite(PINS_LEDS[i], LOW);
     }
 
     myDFPlayer.stop();
 
-    // Exibe o placar final com a pontuação calculada
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("FIM DE JOGO!");
@@ -235,53 +226,70 @@ void encerrar() {
     lcd.print((int)pontuacaoTotal);
 }
 
-// Sorteia o próximo pad e acende o LED do pad escolhido
+// Sorteia o pad, acende o LED e inicia a janela estrita de toque
 int ativarPadding() {
-    // Apaga o LED anterior
+    // Apaga o LED do pad anterior
     if (indicePadAtual != -1) {
         digitalWrite(PINS_LEDS[indicePadAtual], LOW);
     }
 
     indicePadAtual = random(0, 4);
     pinoAtual = PINS_PADS[indicePadAtual];
+    
+    // Liga o LED do pad sorteado
+    digitalWrite(PINS_LEDS[indicePadAtual], HIGH);
+    
+    // Marca o momento exato da iluminação e habilita o flag de aguardando acerto
     instanteAtivacaoPad = millis();
-
-    // Acende o LED do pad sorteado durante a janela de acerto
-    digitalWrite(PINS_LEDS[indicePadPadAtual], HIGH);
+    padAguardandoToque = true;
 
     return pinoAtual;
 }
 
-// Processa o acerto ou erro do usuário ao pressionar um pad
+// Processa as tentativas de toque
 void batida(int pinoPressionado) {
     unsigned long agora = millis();
     unsigned long tempoDecorrido = agora - instanteAtivacaoPad;
 
-    if (pinoPressionado == pinoAtual && tempoDecorrido <= tempoDeAtivacao) {
+    // Condição de Acerto:
+    // 1. O pino tocado deve coincidir com o pad ativo sorteado.
+    // 2. O toque deve acontecer dentro da janela limite de tempo (tempoDeAtivacao).
+    // 3. O pad precisa estar aguardando a resposta ativamente.
+    if (padAguardandoToque && pinoPressionado == pinoAtual && tempoDecorrido <= tempoDeAtivacao) {
         tempoDeResposta = (float)calcularTempoDeResposta(agora, instanteAtivacaoPad);
         somaTemposResposta += tempoDeResposta;
         totalAcertos++;
 
-        // Cálculo da pontuação da jogada: Ponto da vez = 1000 - 0.5 * tempo de resposta
+        // Cálculo da pontuação: Ponto da vez = 1000 - 0.5 * tempo de resposta
         float pontoDaVez = 1000.0 - (0.5 * tempoDeResposta);
-        if (pontoDaVez < 0) pontoDaVez = 0; // Garante que a pontuação não seja negativa
+        if (pontoDaVez < 0) pontoDaVez = 0;
         pontuacaoTotal += pontoDaVez;
 
-        // Apaga o LED aceso
+        // Apaga o LED do pad acerto e fecha a janela do toque
         digitalWrite(PINS_LEDS[indicePadAtual], LOW);
+        padAguardandoToque = false;
 
-        ativarPadding(); // Sorteia próximo pad
-    } else {
+        ativarPadding(); // Próximo alvo
+    } 
+    // Caso contrário: Toque em momento/pino incorreto ou estouro de tempo
+    else {
         vidas--;
-
-        // Apaga o LED do pad
+        
+        // Apaga o LED do pad ativo
         if (indicePadAtual != -1) {
             digitalWrite(PINS_LEDS[indicePadAtual], LOW);
         }
+        padAguardandoToque = false;
+
+        // Reproduz efeito sonoro de erro (Faixa 002 da Pasta 01)
+        myDFPlayer.playFolder(1, 2);
+        delay(300); // Breve pausa para reprodução do efeito
 
         if (vidas <= 0) {
             encerrar();
         } else {
+            // Retoma a trilha musical do jogo (Faixa 001 da Pasta 01) e ativa novo pad
+            myDFPlayer.playFolder(1, 1);
             ativarPadding();
         }
     }
@@ -301,11 +309,11 @@ float atualizarValor(float valorAtual, float incremento) {
 // ============================================================================
 
 void loop() {
-    // Leitura dos botões de controle fora da partida
+    // Leitura dos botões de controle
     if (digitalRead(BOTAO_START) == LOW && !jogoAtivo) {
         reset();
         selecionarDificuldadeComContagem();
-        delay(300); // Debounce
+        delay(300);
     }
 
     if (digitalRead(BOTAO_RESET) == LOW) {
@@ -322,14 +330,14 @@ void loop() {
     if (jogoAtivo) {
         for (int i = 0; i < 4; i++) {
             if (digitalRead(PINS_PADS[i]) == LOW) {
-                batida(PINS_PADS[i]);
-                delay(150); // Debounce do botão acionado
+                batida(PINS_PADS[i]); // Valida se o pino acionado é o correto
+                delay(150); // Debounce
             }
         }
 
-        // Caso ultrapasse os 3 segundos (3000ms) sem acerto, registra falha por tempo
-        if (millis() - instanteAtivacaoPad > tempoDeAtivacao) {
-            batida(-1); // Erro por estouro do tempo limite
+        // Verifica estouro do tempo limite sem resposta (mais de 3000ms sem toque)
+        if (padAguardandoToque && (millis() - instanteAtivacaoPad > tempoDeAtivacao)) {
+            batida(-1); // Força falha por tempo expirado
         }
     }
 }
