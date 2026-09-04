@@ -4,12 +4,16 @@
 volatile EstadoJogo estadoAtual = INIT;
 int vidas = 3;
 int indicePadAtual = -1;
-unsigned long tempoDeAtivacao = 3000;
+unsigned long tempoDeAtivacao = 3000; // Janela limite de 3 segundos
 unsigned long instanteAtivacaoPad = 0;
 int modoDificuldade = 0;
 float pontuacaoTotal = 0.0;
 float somaTemposResposta = 0.0;
 int totalAcertos = 0;
+
+// Controle da Janela Ativa e do Tempo Morto
+bool padAguardandoToque = false;
+const unsigned long TEMPO_MORTO_DURACAO_MS = 1000; // 1 segundo de intervalo sem pad ativo
 
 QueueHandle_t filaToques;
 QueueHandle_t filaLEDs;
@@ -76,20 +80,24 @@ void TaskJogoLogic(void *pvParameters) {
                 tempoDeAtivacao = 3000;
                 totalAcertos = 0;
                 somaTemposResposta = 0.0;
+                padAguardandoToque = false;
                 xQueueReset(filaToques);
                 
-                // Aguarda a TaskLCD finalizar as animações/mensagens de pré-jogo
                 while(estadoAtual == PREPARAR) {
                     vTaskDelay(pdMS_TO_TICKS(50));
                 }
                 
                 myDFPlayer.playFolder(1, 1); // Toca a trilha principal
-                indicePadAtual = random(0, 4);
                 
-                // Liga o LED do pad sorteado
+                // Entra no primeiro tempo morto antes de sortear o 1º pad
+                vTaskDelay(pdMS_TO_TICKS(TEMPO_MORTO_DURACAO_MS));
+
+                indicePadAtual = random(0, 4);
                 cmdLed = {indicePadAtual, modoDificuldade == 0 ? 2 : 1, strip[0].Color(0, 0, 255)};
                 xQueueSend(filaLEDs, &cmdLed, portMAX_DELAY);
+                
                 instanteAtivacaoPad = millis();
+                padAguardandoToque = true; // Abre a janela de toque de 3 segundos
                 break;
 
             case JOGANDO:
@@ -102,14 +110,24 @@ void TaskJogoLogic(void *pvParameters) {
                     break;
                 }
 
-                // Aguarda o clique de um pad até o tempo limite (3000ms)
+                // Verifica a fila de toques com o tempo limite da janela
                 if (xQueueReceive(filaToques, &evento, pdMS_TO_TICKS(tempoDeAtivacao)) == pdTRUE) {
-                    if (evento.indicePad == indicePadAtual) {
-                        // --- CASO DE ACERTO ---
-                        float tempoReacao = (float)(evento.instanteToque - instanteAtivacaoPad);
+                    unsigned long tempoDecorrito = evento.instanteToque - instanteAtivacaoPad;
+
+                    // CONDIÇÃO RIGOROSA DE ACERTO:
+                    // 1. A janela de toque precisa estar aberta (padAguardandoToque == true)
+                    // 2. O pad pressionado precisa ser exatamente o pad sorteado
+                    // 3. O toque precisa ocorrer estritamente em <= 3 segundos
+                    if (padAguardandoToque && evento.indicePad == indicePadAtual && tempoDecorrito <= tempoDeAtivacao) {
+                        
+                        // Fecha a janela de acerto
+                        padAguardandoToque = false;
+
+                        float tempoReacao = (float)tempoDecorrito;
                         somaTemposResposta += tempoReacao;
                         totalAcertos++;
                         
+                        // Fórmula: Ponto da Vez = 1000 - 0.5 * Tempo de Resposta
                         float pontoDaVez = 1000.0 - (0.5 * tempoReacao);
                         if (pontoDaVez < 0) pontoDaVez = 0;
                         pontuacaoTotal += pontoDaVez;
@@ -118,57 +136,72 @@ void TaskJogoLogic(void *pvParameters) {
                         cmdLed = {indicePadAtual, 0, 0};
                         xQueueSend(filaLEDs, &cmdLed, 0);
 
-                        // Sorteia novo pad para a próxima rodada
+                        // --- ENTRA NO TEMPO MORTO (1 SEGUNDO DE SILÊNCIO/PADS DESLIGADOS) ---
+                        // Limpa qualquer toque acidental dado logo após o acerto
+                        xQueueReset(filaToques);
+                        vTaskDelay(pdMS_TO_TICKS(TEMPO_MORTO_DURACAO_MS));
+
+                        // Sorteia o novo pad e abre nova janela
                         indicePadAtual = random(0, 4);
                         cmdLed = {indicePadAtual, modoDificuldade == 0 ? 2 : 1, strip[0].Color(0, 0, 255)};
                         xQueueSend(filaLEDs, &cmdLed, 0);
                         
                         instanteAtivacaoPad = millis();
-                        break; // Impede que caia no bloco de erro
+                        padAguardandoToque = true; 
+                        break;
                     } else {
-                        goto TratarErro; // Toque no pad incorreto
+                        // Toque fora do tempo, no pad errado ou durante tempo morto -> ERRO!
+                        goto TratarErro; 
                     }
                 } else {
-                    goto TratarErro; // Tempo limite expirado (mais de 3s sem toque)
+                    // Estouro do tempo limite (passaram-se 3s sem toque) -> ERRO!
+                    goto TratarErro; 
                 }
                 break;
 
             TratarErro:
                 vidas--;
+                padAguardandoToque = false; // Fecha a janela de toque
                 
                 // 1. Apaga os LEDs do pad ativo
                 cmdLed = {indicePadAtual, 0, 0};
                 xQueueSend(filaLEDs, &cmdLed, 0);
 
-                // 2. Pausa a música principal exatamente onde parou
+                // 2. Pausa a música principal no ponto exato
                 myDFPlayer.pause(); 
                 vTaskDelay(pdMS_TO_TICKS(100)); 
 
                 // 3. Toca o efeito sonoro de erro (Pasta 01, Faixa 002)
                 myDFPlayer.playFolder(1, 2);
 
-                // 4. Pausa de 5 segundos para respirar (o LCD é atualizado via TaskLCD_UI)
+                // 4. Pausa de 5 segundos para respirar (o LCD é gerenciado via TaskLCD_UI)
                 vTaskDelay(pdMS_TO_TICKS(5000));
 
                 if (vidas <= 0) {
                     estadoAtual = GAMEOVER;
                 } else {
-                    // Limpa cliques acidentais feitos durante a pausa
+                    // Limpa cliques afobados feitos durante a pausa de erro
                     xQueueReset(filaToques);
                     
-                    // 5. Retoma a música principal de onde havia parado
+                    // 5. Retoma a música de onde parou
                     myDFPlayer.start();
                     
-                    // 6. Sorteia um novo pad e retoma a partida
+                    // Tempo morto antes de reativar o jogo
+                    vTaskDelay(pdMS_TO_TICKS(TEMPO_MORTO_DURACAO_MS));
+
+                    // 6. Sorteia o novo pad e abre a janela do toque
                     indicePadAtual = random(0, 4);
                     cmdLed = {indicePadAtual, modoDificuldade == 0 ? 2 : 1, strip[0].Color(0, 0, 255)};
                     xQueueSend(filaLEDs, &cmdLed, 0);
+                    
                     instanteAtivacaoPad = millis();
+                    padAguardandoToque = true;
                 }
                 break;
 
             case GAMEOVER:
                 myDFPlayer.stop();
+                padAguardandoToque = false;
                 if (digitalRead(BOTAO_START) == LOW) {
                     estadoAtual = MENU;
                     vTaskDelay(pdMS_TO_TICKS(300));
