@@ -1,25 +1,97 @@
 #include "game_logic.h"
 
-// Definição das variáveis globais compartilhadas
 volatile EstadoJogo estadoAtual = INIT;
 int vidas = 3;
 int indicePadAtual = -1;
-unsigned long tempoDeAtivacao = 3000; // Janela limite de 3 segundos
+unsigned long tempoDeAtivacao = 3000;
 unsigned long instanteAtivacaoPad = 0;
 int modoDificuldade = 0;
 float pontuacaoTotal = 0.0;
 float somaTemposResposta = 0.0;
 int totalAcertos = 0;
 
-// Controle da Janela Ativa e do Tempo Morto
-bool padAguardandoToque = false;
-const unsigned long TEMPO_MORTO_DURACAO_MS = 1000; // 1 segundo de intervalo sem pad ativo
+Jogador leaderboard[5];
+char nomeJogadorAtual[11] = "Player";
+
+Preferences prefs;
 
 QueueHandle_t filaToques;
 QueueHandle_t filaLEDs;
 
 volatile unsigned long ultimoTempoInterrupcao[4] = {0, 0, 0, 0};
 const unsigned long TEMPO_DEBOUNCE_MS = 150;
+
+// Carrega o ranking da memória Flash (NVS)
+void carregarLeaderboard() {
+    prefs.begin("leaderboard", true); // Abre em modo leitura
+    for (int i = 0; i < 5; i++) {
+        String chaveNome = "nome" + String(i);
+        String chavePontos = "pts" + String(i);
+
+        String nomeSalvo = prefs.getString(chaveNome.c_str(), "---");
+        strncpy(leaderboard[i].nome, nomeSalvo.c_str(), 10);
+        leaderboard[i].nome[10] = '\0';
+        
+        leaderboard[i].pontuacao = prefs.getFloat(chavePontos.c_str(), 0.0);
+    }
+    prefs.end();
+}
+
+// Salva o ranking na memória Flash (NVS)
+void salvarLeaderboard() {
+    prefs.begin("leaderboard", false); // Abre em modo escrita
+    for (int i = 0; i < 5; i++) {
+        String chaveNome = "nome" + String(i);
+        String chavePontos = "pts" + String(i);
+
+        prefs.putString(chaveNome.c_str(), leaderboard[i].nome);
+        prefs.putFloat(chavePontos.c_str(), leaderboard[i].pontuacao);
+    }
+    prefs.end();
+}
+
+// Verifica e insere a nova pontuação no TOP 5 se qualificado
+void atualizarRanking(const char* nome, float pontos) {
+    for (int i = 0; i < 5; i++) {
+        if (pontos > leaderboard[i].pontuacao) {
+            // Desloca as posições inferiores para baixo
+            for (int j = 4; j > i; j--) {
+                leaderboard[j] = leaderboard[j - 1];
+            }
+            // Insere o novo jogador na posição corrente
+            strncpy(leaderboard[i].nome, nome, 10);
+            leaderboard[i].nome[10] = '\0';
+            leaderboard[i].pontuacao = pontos;
+
+            salvarLeaderboard(); // Persiste no Flash
+            break;
+        }
+    }
+}
+
+void lerNomeSerial() {
+    Serial.println("\n==========================================");
+    Serial.println(" NOVO JOGO! DIGITE SEU NOME NO TERMINAL: ");
+    Serial.println("==========================================");
+
+    // Esvazia buffer da serial
+    while (Serial.available()) Serial.read();
+
+    while (true) {
+        if (Serial.available() > 0) {
+            String entrada = Serial.readStringUntil('\n');
+            entrada.trim();
+            if (entrada.length() > 0) {
+                strncpy(nomeJogadorAtual, entrada.c_str(), 10);
+                nomeJogadorAtual[10] = '\0';
+                Serial.print("Nome Cadastrado: ");
+                Serial.println(nomeJogadorAtual);
+                break;
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
 
 void IRAM_ATTR ISR_Pad(void* arg) {
     int indicePad = (int)(intptr_t)arg;
@@ -42,12 +114,15 @@ void IRAM_ATTR ISR_Pad(void* arg) {
 void initGameHardware() {
     pinMode(BOTAO_DIFICULDADE, INPUT_PULLUP);
     pinMode(BOTAO_START, INPUT_PULLUP);
+    pinMode(BOTAO_LEADERBOARD, INPUT_PULLUP);
     pinMode(BOTAO_SAIR, INPUT_PULLUP);
 
     for (int i = 0; i < 4; i++) {
         pinMode(PINS_PADS[i], INPUT_PULLUP);
         attachInterruptArg(digitalPinToInterrupt(PINS_PADS[i]), ISR_Pad, (void*)(intptr_t)i, FALLING);
     }
+
+    carregarLeaderboard(); // Carrega os melhores tempos ao ligar a placa
 
     filaToques = xQueueCreate(10, sizeof(EventoToque));
     filaLEDs = xQueueCreate(5, sizeof(ComandoLED));
@@ -64,14 +139,27 @@ void TaskJogoLogic(void *pvParameters) {
                 break;
 
             case MENU:
-                if (digitalRead(BOTAO_DIFICULDADE) == LOW) {
-                    modoDificuldade = 1;
-                    estadoAtual = PREPARAR;
-                } else if (digitalRead(BOTAO_START) == LOW) {
-                    modoDificuldade = 0;
-                    estadoAtual = PREPARAR;
+                if (digitalRead(BOTAO_START) == LOW) {
+                    estadoAtual = REGISTRAR_NOME;
+                    vTaskDelay(pdMS_TO_TICKS(300));
+                } else if (digitalRead(BOTAO_LEADERBOARD) == LOW) {
+                    estadoAtual = LEADERBOARD;
+                    vTaskDelay(pdMS_TO_TICKS(300));
                 }
                 vTaskDelay(pdMS_TO_TICKS(50));
+                break;
+
+            case LEADERBOARD:
+                if (digitalRead(BOTAO_SAIR) == LOW || digitalRead(BOTAO_START) == LOW) {
+                    estadoAtual = MENU;
+                    vTaskDelay(pdMS_TO_TICKS(300));
+                }
+                vTaskDelay(pdMS_TO_TICKS(50));
+                break;
+
+            case REGISTRAR_NOME:
+                lerNomeSerial();
+                estadoAtual = PREPARAR;
                 break;
 
             case PREPARAR:
@@ -80,24 +168,20 @@ void TaskJogoLogic(void *pvParameters) {
                 tempoDeAtivacao = 3000;
                 totalAcertos = 0;
                 somaTemposResposta = 0.0;
-                padAguardandoToque = false;
                 xQueueReset(filaToques);
                 
                 while(estadoAtual == PREPARAR) {
                     vTaskDelay(pdMS_TO_TICKS(50));
                 }
                 
-                myDFPlayer.playFolder(1, 1); // Toca a trilha principal
-                
-                // Entra no primeiro tempo morto antes de sortear o 1º pad
-                vTaskDelay(pdMS_TO_TICKS(TEMPO_MORTO_DURACAO_MS));
+                myDFPlayer.playFolder(1, 1);
+                vTaskDelay(pdMS_TO_TICKS(1000));
 
                 indicePadAtual = random(0, 4);
                 cmdLed = {indicePadAtual, modoDificuldade == 0 ? 2 : 1, strip[0].Color(0, 0, 255)};
                 xQueueSend(filaLEDs, &cmdLed, portMAX_DELAY);
                 
                 instanteAtivacaoPad = millis();
-                padAguardandoToque = true; // Abre a janela de toque de 3 segundos
                 break;
 
             case JOGANDO:
@@ -110,98 +194,63 @@ void TaskJogoLogic(void *pvParameters) {
                     break;
                 }
 
-                // Verifica a fila de toques com o tempo limite da janela
                 if (xQueueReceive(filaToques, &evento, pdMS_TO_TICKS(tempoDeAtivacao)) == pdTRUE) {
-                    unsigned long tempoDecorrito = evento.instanteToque - instanteAtivacaoPad;
-
-                    // CONDIÇÃO RIGOROSA DE ACERTO:
-                    // 1. A janela de toque precisa estar aberta (padAguardandoToque == true)
-                    // 2. O pad pressionado precisa ser exatamente o pad sorteado
-                    // 3. O toque precisa ocorrer estritamente em <= 3 segundos
-                    if (padAguardandoToque && evento.indicePad == indicePadAtual && tempoDecorrito <= tempoDeAtivacao) {
-                        
-                        // Fecha a janela de acerto
-                        padAguardandoToque = false;
-
-                        float tempoReacao = (float)tempoDecorrito;
+                    if (evento.indicePad == indicePadAtual) {
+                        float tempoReacao = (float)(evento.instanteToque - instanteAtivacaoPad);
                         somaTemposResposta += tempoReacao;
                         totalAcertos++;
                         
-                        // Fórmula: Ponto da Vez = 1000 - 0.5 * Tempo de Resposta
                         float pontoDaVez = 1000.0 - (0.5 * tempoReacao);
                         if (pontoDaVez < 0) pontoDaVez = 0;
                         pontuacaoTotal += pontoDaVez;
 
-                        // Apaga o LED do pad acertado
                         cmdLed = {indicePadAtual, 0, 0};
                         xQueueSend(filaLEDs, &cmdLed, 0);
 
-                        // --- ENTRA NO TEMPO MORTO (1 SEGUNDO DE SILÊNCIO/PADS DESLIGADOS) ---
-                        // Limpa qualquer toque acidental dado logo após o acerto
-                        xQueueReset(filaToques);
-                        vTaskDelay(pdMS_TO_TICKS(TEMPO_MORTO_DURACAO_MS));
+                        vTaskDelay(pdMS_TO_TICKS(1000)); // Tempo morto de 1s
 
-                        // Sorteia o novo pad e abre nova janela
                         indicePadAtual = random(0, 4);
                         cmdLed = {indicePadAtual, modoDificuldade == 0 ? 2 : 1, strip[0].Color(0, 0, 255)};
                         xQueueSend(filaLEDs, &cmdLed, 0);
                         
                         instanteAtivacaoPad = millis();
-                        padAguardandoToque = true; 
-                        break;
                     } else {
-                        // Toque fora do tempo, no pad errado ou durante tempo morto -> ERRO!
-                        goto TratarErro; 
+                        goto TratarErro;
                     }
                 } else {
-                    // Estouro do tempo limite (passaram-se 3s sem toque) -> ERRO!
-                    goto TratarErro; 
+                    goto TratarErro;
                 }
                 break;
 
             TratarErro:
                 vidas--;
-                padAguardandoToque = false; // Fecha a janela de toque
-                
-                // 1. Apaga os LEDs do pad ativo
                 cmdLed = {indicePadAtual, 0, 0};
                 xQueueSend(filaLEDs, &cmdLed, 0);
 
-                // 2. Pausa a música principal no ponto exato
                 myDFPlayer.pause(); 
                 vTaskDelay(pdMS_TO_TICKS(100)); 
 
-                // 3. Toca o efeito sonoro de erro (Pasta 01, Faixa 002)
-                myDFPlayer.playFolder(1, 2);
-
-                // 4. Pausa de 5 segundos para respirar (o LCD é gerenciado via TaskLCD_UI)
-                vTaskDelay(pdMS_TO_TICKS(5000));
+                myDFPlayer.playFolder(1, 2); // Som de erro
+                vTaskDelay(pdMS_TO_TICKS(5000)); // Pausa de 5s para respirar
 
                 if (vidas <= 0) {
+                    atualizarRanking(nomeJogadorAtual, pontuacaoTotal); // Registra no Ranking Persistente
                     estadoAtual = GAMEOVER;
                 } else {
-                    // Limpa cliques afobados feitos durante a pausa de erro
                     xQueueReset(filaToques);
-                    
-                    // 5. Retoma a música de onde parou
                     myDFPlayer.start();
                     
-                    // Tempo morto antes de reativar o jogo
-                    vTaskDelay(pdMS_TO_TICKS(TEMPO_MORTO_DURACAO_MS));
+                    vTaskDelay(pdMS_TO_TICKS(1000)); // Tempo morto
 
-                    // 6. Sorteia o novo pad e abre a janela do toque
                     indicePadAtual = random(0, 4);
                     cmdLed = {indicePadAtual, modoDificuldade == 0 ? 2 : 1, strip[0].Color(0, 0, 255)};
                     xQueueSend(filaLEDs, &cmdLed, 0);
-                    
                     instanteAtivacaoPad = millis();
-                    padAguardandoToque = true;
                 }
                 break;
 
             case GAMEOVER:
                 myDFPlayer.stop();
-                padAguardandoToque = false;
                 if (digitalRead(BOTAO_START) == LOW) {
                     estadoAtual = MENU;
                     vTaskDelay(pdMS_TO_TICKS(300));
