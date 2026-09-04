@@ -78,13 +78,15 @@ void TaskJogoLogic(void *pvParameters) {
                 somaTemposResposta = 0.0;
                 xQueueReset(filaToques);
                 
+                // Aguarda a TaskLCD finalizar as animações/mensagens de pré-jogo
                 while(estadoAtual == PREPARAR) {
                     vTaskDelay(pdMS_TO_TICKS(50));
                 }
                 
-                myDFPlayer.playFolder(1, 1);
+                myDFPlayer.playFolder(1, 1); // Toca a trilha principal
                 indicePadAtual = random(0, 4);
                 
+                // Liga o LED do pad sorteado
                 cmdLed = {indicePadAtual, modoDificuldade == 0 ? 2 : 1, strip[0].Color(0, 0, 255)};
                 xQueueSend(filaLEDs, &cmdLed, portMAX_DELAY);
                 instanteAtivacaoPad = millis();
@@ -92,7 +94,7 @@ void TaskJogoLogic(void *pvParameters) {
 
             case JOGANDO:
                 if (digitalRead(BOTAO_SAIR) == LOW) {
-                    estadoAtual = digitalRead(BOTAO_SAIR) == LOW ? GAMEOVER : PREPARAR;
+                    estadoAtual = GAMEOVER;
                     myDFPlayer.stop();
                     cmdLed = {indicePadAtual, 0, 0};
                     xQueueSend(filaLEDs, &cmdLed, 0);
@@ -100,8 +102,10 @@ void TaskJogoLogic(void *pvParameters) {
                     break;
                 }
 
+                // Aguarda o clique de um pad até o tempo limite (3000ms)
                 if (xQueueReceive(filaToques, &evento, pdMS_TO_TICKS(tempoDeAtivacao)) == pdTRUE) {
                     if (evento.indicePad == indicePadAtual) {
+                        // --- CASO DE ACERTO ---
                         float tempoReacao = (float)(evento.instanteToque - instanteAtivacaoPad);
                         somaTemposResposta += tempoReacao;
                         totalAcertos++;
@@ -110,36 +114,52 @@ void TaskJogoLogic(void *pvParameters) {
                         if (pontoDaVez < 0) pontoDaVez = 0;
                         pontuacaoTotal += pontoDaVez;
 
+                        // Apaga o LED do pad acertado
                         cmdLed = {indicePadAtual, 0, 0};
                         xQueueSend(filaLEDs, &cmdLed, 0);
 
+                        // Sorteia novo pad para a próxima rodada
                         indicePadAtual = random(0, 4);
                         cmdLed = {indicePadAtual, modoDificuldade == 0 ? 2 : 1, strip[0].Color(0, 0, 255)};
                         xQueueSend(filaLEDs, &cmdLed, 0);
                         
                         instanteAtivacaoPad = millis();
+                        break; // Impede que caia no bloco de erro
                     } else {
-                        goto TratarErro;
+                        goto TratarErro; // Toque no pad incorreto
                     }
                 } else {
-                    goto TratarErro;
+                    goto TratarErro; // Tempo limite expirado (mais de 3s sem toque)
                 }
                 break;
 
             TratarErro:
                 vidas--;
+                
+                // 1. Apaga os LEDs do pad ativo
                 cmdLed = {indicePadAtual, 0, 0};
                 xQueueSend(filaLEDs, &cmdLed, 0);
+
+                // 2. Pausa a música principal exatamente onde parou
+                myDFPlayer.pause(); 
+                vTaskDelay(pdMS_TO_TICKS(100)); 
+
+                // 3. Toca o efeito sonoro de erro (Pasta 01, Faixa 002)
                 myDFPlayer.playFolder(1, 2);
-                
-                vTaskDelay(pdMS_TO_TICKS(1000));
+
+                // 4. Pausa de 5 segundos para respirar (o LCD é atualizado via TaskLCD_UI)
+                vTaskDelay(pdMS_TO_TICKS(5000));
 
                 if (vidas <= 0) {
                     estadoAtual = GAMEOVER;
                 } else {
-                    myDFPlayer.playFolder(1, 1);
+                    // Limpa cliques acidentais feitos durante a pausa
                     xQueueReset(filaToques);
                     
+                    // 5. Retoma a música principal de onde havia parado
+                    myDFPlayer.start();
+                    
+                    // 6. Sorteia um novo pad e retoma a partida
                     indicePadAtual = random(0, 4);
                     cmdLed = {indicePadAtual, modoDificuldade == 0 ? 2 : 1, strip[0].Color(0, 0, 255)};
                     xQueueSend(filaLEDs, &cmdLed, 0);
