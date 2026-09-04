@@ -38,7 +38,6 @@ void IRAM_ATTR ISR_Pad(void* arg) {
 void initGameHardware() {
     pinMode(BOTAO_DIFICULDADE, INPUT_PULLUP);
     pinMode(BOTAO_START, INPUT_PULLUP);
-    pinMode(BOTAO_RESET, INPUT_PULLUP);
     pinMode(BOTAO_SAIR, INPUT_PULLUP);
 
     for (int i = 0; i < 4; i++) {
@@ -92,7 +91,7 @@ void TaskJogoLogic(void *pvParameters) {
                 break;
 
             case JOGANDO:
-                if (digitalRead(BOTAO_SAIR) == LOW || digitalRead(BOTAO_RESET) == LOW) {
+                if (digitalRead(BOTAO_SAIR) == LOW) {
                     estadoAtual = digitalRead(BOTAO_SAIR) == LOW ? GAMEOVER : PREPARAR;
                     myDFPlayer.stop();
                     cmdLed = {indicePadAtual, 0, 0};
@@ -150,7 +149,7 @@ void TaskJogoLogic(void *pvParameters) {
 
             case GAMEOVER:
                 myDFPlayer.stop();
-                if (digitalRead(BOTAO_RESET) == LOW || digitalRead(BOTAO_START) == LOW) {
+                if (digitalRead(BOTAO_START) == LOW) {
                     estadoAtual = MENU;
                     vTaskDelay(pdMS_TO_TICKS(300));
                 }
