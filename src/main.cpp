@@ -1,4 +1,4 @@
-/*
+
 #include <Arduino.h>
 #include <HardwareSerial.h>
 #include <DFRobotDFPlayerMini.h>
@@ -8,7 +8,7 @@
 // ============================================================================
 // CONFIGURAÇÕES DO DISPLAY LCD I2C
 // ============================================================================
-LiquidCrystal_I2C lcd(0x27, 20, 4);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 // ============================================================================
 // MAPEAMENTO DE PINOS (ESP32)
@@ -17,7 +17,6 @@ LiquidCrystal_I2C lcd(0x27, 20, 4);
 // Pinos dos Botões de Controle
 const int BOTAO_DIFICULDADE = 5;
 const int BOTAO_START       = 10;
-const int BOTAO_RESET       = 11;
 const int BOTAO_SAIR        = 12;
 
 // Pinos dos Pads/Almofadas Rítmicas (Alvos)
@@ -120,6 +119,12 @@ void selecionarDificuldadeComContagem() {
                 lcd.print("MODO DIFICIL");
                 lcd.setCursor(0, 1);
                 lcd.print("SELECIONADO!");
+                lcd.clear();
+                lcd.setCursor(0,0);
+                lcd.print("VAMOS VER");
+                lcd.setCursor(0,1);
+                lcd.print("DO QUE É CAPAZ");
+                lcd.clear();
                 delay(1000);
                 x = 0; // Encerra a contagem
                 break;
@@ -134,6 +139,12 @@ void selecionarDificuldadeComContagem() {
         lcd.print("MODO FACIL");
         lcd.setCursor(0, 1);
         lcd.print("SELECIONADO!");
+        lcd.clear();
+        lcd.setCursor(0,0);
+        lcd.print("VAMOS VER");
+        lcd.setCursor(0,1);
+        lcd.print("DO QUE É CAPAZ");
+        lcd.clear();
         delay(1000);
     }
 
@@ -160,7 +171,6 @@ void setup() {
 
     pinMode(BOTAO_DIFICULDADE, INPUT_PULLUP);
     pinMode(BOTAO_START, INPUT_PULLUP);
-    pinMode(BOTAO_RESET, INPUT_PULLUP);
     pinMode(BOTAO_SAIR, INPUT_PULLUP);
 
     for (int i = 0; i < 4; i++) {
@@ -316,11 +326,6 @@ void loop() {
         delay(300);
     }
 
-    if (digitalRead(BOTAO_RESET) == LOW) {
-        reset();
-        delay(300);
-    }
-
     if (digitalRead(BOTAO_SAIR) == LOW && jogoAtivo) {
         encerrar();
         delay(300);
@@ -341,4 +346,3 @@ void loop() {
         }
     }
 }
-*/
