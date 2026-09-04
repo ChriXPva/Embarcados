@@ -13,7 +13,6 @@
 // Pinos
 const int BOTAO_DIFICULDADE = 5;
 const int BOTAO_START       = 10;
-const int BOTAO_RESET       = 11;
 const int BOTAO_SAIR        = 12;
 
 const int PINS_PADS[4] = {13, 14, 27, 33};
