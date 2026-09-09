@@ -5,5 +5,6 @@
 
 void initKeypad();
 void lerNomeTecladoTCA8418();
+char traduzirEventoTCA(uint8_t keyEvent);
 
 #endif

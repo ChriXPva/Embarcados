@@ -1,4 +1,5 @@
 #include "display_ui.h"
+#include "keyboard.h"
 
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 
@@ -10,9 +11,10 @@ void initDisplay() {
 
 void TaskLCD_UI(void *pvParameters) {
     EstadoJogo estadoAnterior = GAMEOVER;
-    int indiceExibicaoRanking = 0;
+    int indiceExibicaoRanking = 0; // Índice de 0 a 4 (Posição 1 a 5)
 
     for (;;) {
+        // Atualiza a tela base quando muda o estado do jogo
         if (estadoAtual != estadoAnterior) {
             estadoAnterior = estadoAtual;
             lcd.clear();
@@ -34,12 +36,12 @@ void TaskLCD_UI(void *pvParameters) {
                     break;
 
                 case REGISTRAR_NOME:
-                    lcd.setCursor(0, 0); lcd.print("DIGITE SEU NOME");
-                    lcd.setCursor(0, 1); lcd.print("NO TERMINAL SERIAL..");
+                    // O controle da tela durante a digitação é feito em lerNomeTecladoTCA8418
                     break;
 
                 case LEADERBOARD:
-                    lcd.setCursor(0, 0); lcd.print("=== TOP 5 RANKING ===");
+                    indiceExibicaoRanking = 0; // Inicia sempre na 1ª posição (TOP 1)
+                    tca.flush(); // Limpa eventos antigos de tecla
                     break;
 
                 case PREPARAR:
@@ -64,18 +66,55 @@ void TaskLCD_UI(void *pvParameters) {
             }
         }
 
-        // Navegação em roleta no Leaderboard a cada 2 segundos
+        // --- LÓGICA DE NAVEGAÇÃO DO LEADERBOARD ---
         if (estadoAtual == LEADERBOARD) {
-            lcd.setCursor(0, 1);
-            lcd.print("#"); lcd.print(indiceExibicaoRanking + 1);
-            lcd.print(" "); lcd.print(leaderboard[indiceExibicaoRanking].nome);
-            lcd.print(" - "); lcd.print((int)leaderboard[indiceExibicaoRanking].pontuacao);
-            lcd.print(" pts    ");
+            // Leitura de comandos do teclado TCA8418 para navegação
+            if (tca.available() > 0) {
+                uint8_t event = tca.getEvent();
+                // Processa apenas quando a tecla é PRESSIONADA (bit 0x80 ativo)
+                if (event & 0x80) { 
+                    char tecla = traduzirEventoTCA(event);
 
-            indiceExibicaoRanking = (indiceExibicaoRanking + 1) % 5;
-            vTaskDelay(pdMS_TO_TICKS(2000));
-        } else {
-            vTaskDelay(pdMS_TO_TICKS(100));
+                    if (tecla == '#') {
+                        // Avança para a próxima posição (máximo: posição 5, índice 4)
+                        if (indiceExibicaoRanking < 4) {
+                            indiceExibicaoRanking++;
+                        }
+                    } 
+                    else if (tecla == '*') {
+                        // Volta uma posição (mínimo: posição 1, índice 0)
+                        if (indiceExibicaoRanking > 0) {
+                            indiceExibicaoRanking--;
+                        }
+                    } 
+                    else if (tecla == '0') {
+                        // Volta para o Menu Principal
+                        estadoAtual = MENU;
+                    }
+                }
+            }
+
+            // Exibe exatamente no formato solicitado:
+            // "Posição. Nome escolhido - Pontuação pts"
+            // Exemplo: "1. Carlos - 850 pts"
+            lcd.setCursor(0, 0);
+            lcd.print("=== LEADERBOARD ===");
+            lcd.setCursor(0, 1);
+            
+            // Imprime "Posição. Nome - Pontos pts"
+            lcd.print(indiceExibicaoRanking + 1);
+            lcd.print(". ");
+            lcd.print(leaderboard[indiceExibicaoRanking].nome);
+            lcd.print(" - ");
+            lcd.print((int)leaderboard[indiceExibicaoRanking].pontuacao);
+            lcd.print(" pts    "); // Espaços ao final para limpar caracteres antigos
         }
+
+        if (estadoAtual == JOGANDO) {
+            lcd.setCursor(7, 1);
+            lcd.print(vidas);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(50)); // Atualização da Task LCD
     }
 }
