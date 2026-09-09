@@ -8,10 +8,11 @@
 #include <HardwareSerial.h>
 #include <DFRobotDFPlayerMini.h>
 #include <Preferences.h>
+#include <Adafruit_TCA8418.h> // Biblioteca do controlador do teclado
 
 #define NUM_LEDS 10
 
-// Pinos
+// Pinos dos Botões de Controle
 const int BOTAO_DIFICULDADE = 5;
 const int BOTAO_START       = 10;
 const int BOTAO_LEADERBOARD = 11;
@@ -23,9 +24,10 @@ const int PINS_LEDS[4] = {18, 19, 21, 23};
 #define DFPLAYER_RX 16
 #define DFPLAYER_TX 17
 
-// Declaração do protótipo/extern para o DFPlayer Mini e para as fitas de LED
+// Instâncias Globais Externas
 extern DFRobotDFPlayerMini myDFPlayer;
 extern Adafruit_NeoPixel strip[4];
+extern Adafruit_TCA8418 tca;
 
 // Estados do Jogo
 enum EstadoJogo { INIT, MENU, LEADERBOARD, REGISTRAR_NOME, PREPARAR, JOGANDO, GAMEOVER };
@@ -37,7 +39,6 @@ struct Jogador {
     float pontuacao;
 };
 
-// Variáveis Globais compartilhadas
 extern Jogador leaderboard[5];
 extern char nomeJogadorAtual[11];
 extern int vidas;
@@ -60,5 +61,7 @@ struct ComandoLED {
 
 extern QueueHandle_t filaToques;
 extern QueueHandle_t filaLEDs;
+
+void lerNomeTecladoTCA8418();
 
 #endif

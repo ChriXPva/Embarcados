@@ -158,7 +158,7 @@ void TaskJogoLogic(void *pvParameters) {
                 break;
 
             case REGISTRAR_NOME:
-                lerNomeSerial();
+                lerNomeTecladoTCA8418(); // Realiza a digitação Multi-tap via Adafruit TCA8418
                 estadoAtual = PREPARAR;
                 break;
 

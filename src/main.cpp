@@ -2,6 +2,7 @@
 #include "display_ui.h"
 #include "leds.h"
 #include "audio.h"
+#include "keyboard.h"
 #include "game_logic.h"
 
 void setup() {
@@ -10,6 +11,7 @@ void setup() {
     initDisplay();
     initLeds();
     initAudio();
+    initKeypad();
     initGameHardware();
 
     // Criação das Tasks no FreeRTOS

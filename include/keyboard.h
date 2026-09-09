@@ -1,0 +1,9 @@
+#ifndef KEYBOARD_H
+#define KEYBOARD_H
+
+#include "config.h"
+
+void initKeypad();
+void lerNomeTecladoTCA8418();
+
+#endif
