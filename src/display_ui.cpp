@@ -14,8 +14,9 @@ void initDisplay(void *pvParameters) {
             vTaskDelay(pdMS_TO_TICKS(100));
         }
     lcd.setCursor(0, 1);
-    xEventGroupSetBits(xInitEventGroup, BIT_INIT_DISPLAY);
     }
+    xEventGroupSetBits(xInitEventGroup, BIT_INIT_DISPLAY);
+    vTaskDelete(NULL); // Finaliza a task após a inicialização
 }
 
 void TaskLCD_UI(void *pvParameters) {

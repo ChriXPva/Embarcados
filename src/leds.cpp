@@ -56,6 +56,7 @@ void initLeds(void *pvParameters) {
         strip[i].show();
     }
     xEventGroupSetBits(xInitEventGroup, BIT_INIT_LEDS);
+    vTaskDelete(NULL);
 }
 
 void TaskEfeitosLED(void *pvParameters) {

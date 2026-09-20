@@ -25,4 +25,5 @@ void initAudio(void *pvParameters) {
 
     myDFPlayer.play(1); // Toca a primeira música do cartão SD
     xEventGroupSetBits(xInitEventGroup, BIT_INIT_AUDIO);
+    vTaskDelete(NULL);
 }

@@ -63,6 +63,7 @@ void initKeypad(void *pvParameters) {
     tca.matrix(4, 3);
     tca.flush(); // Limpa o buffer de eventos
     xEventGroupSetBits(xInitEventGroup, BIT_INIT_KEYPAD);
+    vTaskDelete(NULL);
 }
 
 void lerNomeTecladoTCA8418() {

@@ -128,6 +128,7 @@ void initGameHardware(void *pvParameters) {
     filaLEDs = xQueueCreate(5, sizeof(ComandoLED));
 
     xEventGroupSetBits(xInitEventGroup, BIT_INIT_GAME);
+    vTaskDelete(NULL);
 }
 
 void TaskJogoLogic(void *pvParameters) {
