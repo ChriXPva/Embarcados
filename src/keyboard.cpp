@@ -54,7 +54,7 @@ const char* getCaracteresDaTecla(char tecla) {
     return NULL;
 }
 
-void initKeypad() {
+void initKeypad(void *pvParameters) {
     if (!tca.begin(TCA8418_DEFAULT_ADDR, &Wire)) {
         Serial.println("Erro ao encontrar o controlador TCA8418!");
         return;
@@ -62,6 +62,7 @@ void initKeypad() {
     // Configura a matriz de 4 linhas por 3 colunas
     tca.matrix(4, 3);
     tca.flush(); // Limpa o buffer de eventos
+    xEventGroupSetBits(xInitEventGroup, BIT_INIT_KEYPAD);
 }
 
 void lerNomeTecladoTCA8418() {

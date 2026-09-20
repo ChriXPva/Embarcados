@@ -1,12 +1,21 @@
 #include "display_ui.h"
 #include "keyboard.h"
 
-LiquidCrystal_I2C lcd(0x27, 20, 4);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-void initDisplay() {
+void initDisplay(void *pvParameters) {
     Wire.begin();
     lcd.init();
     lcd.backlight();
+    lcd.setCursor(0, 0);
+    for (int j = 0; j < 2; j++){
+        for (int i = 0; i <= 15; i++) {
+            lcd.print(".");
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+    lcd.setCursor(0, 1);
+    xEventGroupSetBits(xInitEventGroup, BIT_INIT_DISPLAY);
+    }
 }
 
 void TaskLCD_UI(void *pvParameters) {

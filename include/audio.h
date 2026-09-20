@@ -6,6 +6,6 @@
 extern HardwareSerial mySoftwareSerial;
 extern DFRobotDFPlayerMini myDFPlayer;
 
-void initAudio();
+void initAudio(void *pvParameters);
 
 #endif

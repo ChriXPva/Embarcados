@@ -1,0 +1,145 @@
+//Very much inspired by https://www.dfrobot.com/blog-1462.html by DFRobot Feb 26 2020
+//Additions made by Just Baselmans https://www.youtube.com/justbaselmansYT Jan 23 2023
+
+#include "SoftwareSerial.h"
+#include "DFRobotDFPlayerMini.h"
+
+// Initialize software serial on pins 10 and 11
+SoftwareSerial mySoftwareSerial(10, 11);  // RX, TX
+DFRobotDFPlayerMini myDFPlayer;
+String line;
+char command;
+int pause = 0;
+int repeat = 0;
+
+void setup() {
+  // Serial communication with the module
+  mySoftwareSerial.begin(9600);
+  // Initialize Arduino serial
+  Serial.begin(115200);
+  // Check if the module is responding and if the SD card is found
+  Serial.println();
+  Serial.println(F("DFRobot DFPlayer Mini"));
+  Serial.println(F("Initializing DFPlayer module ... Wait!"));
+
+  if (!myDFPlayer.begin(mySoftwareSerial)) {
+    Serial.println(F("Not initialized:"));
+    Serial.println(F("1. Check the DFPlayer Mini connections"));
+    Serial.println(F("2. Insert an SD card"));
+    while (true)
+      ;
+  }
+  Serial.println();
+  Serial.println(F("DFPlayer Mini module initialized!"));
+  // Initial settings
+  myDFPlayer.setTimeOut(500);  // Serial timeout 500ms
+  myDFPlayer.volume(5);        // Volume 5
+  myDFPlayer.EQ(0);            // Normal equalization
+}
+
+void loop() {
+  // Waits for data entry via serial
+  while (Serial.available() > 0) {
+    command = Serial.peek();
+    line = Serial.readStringUntil('\n');
+
+    // Play from first 9 files
+    if ((command >= '1') && (command <= '9')) {
+      Serial.print("Music reproduction");
+      Serial.println(command);
+      command = command - 48;
+      myDFPlayer.play(command);
+    }
+
+    //Play from specific folder
+    if (command == 'f') {
+      int indexF = line.indexOf('f');
+      int indexS = line.indexOf('s');
+      if (indexF != -1 && indexS != -1 && indexF < indexS) {
+        int folder = line.substring(indexF + 1, indexS).toInt();
+        int song = line.substring(indexS + 1).toInt();
+        Serial.print("From folder: ");
+        Serial.print(folder);
+        Serial.print(", playing song: ");
+        Serial.println(song);
+        myDFPlayer.playFolder(folder, song);  //play specific mp3 in SD:/folder/song.mp3; Folder Name(1~99); File Name(1~255)
+      } else {
+        Serial.println("Incomplete 'f' command. Specify both folder and song numbers.");
+      }
+    }
+
+    // Reproduction
+    // Stop
+    if (command == 's') {
+      myDFPlayer.stop();
+      Serial.println("Music Stopped!");
+    }
+
+    // Pause/Continue the music
+    if (command == 'p') {
+      pause = !pause;
+      if (pause == 0) {
+        Serial.println("Continue...");
+        myDFPlayer.start();
+      }
+      if (pause == 1) {
+        Serial.println("Music Paused!");
+        myDFPlayer.pause();
+      }
+    }
+
+    // Toggle repeat mode
+    if (command == 'r') {
+      repeat = !repeat;
+      if (repeat == 1) {
+        myDFPlayer.enableLoop();
+        Serial.println("Repeat mode enabled.");
+      } else {
+        myDFPlayer.disableLoop();
+        Serial.println("Repeat mode disabled.");
+      }
+    }
+
+    // Set volume
+    if (command == 'v') {
+      int myVolume = line.substring(1).toInt();
+      if (myVolume >= 0 && myVolume <= 30) {
+        myDFPlayer.volume(myVolume);
+        Serial.print("Current Volume:");
+        Serial.println(myDFPlayer.readVolume());
+      } else {
+        Serial.println("Invalid volume level, choose a number between 0-30.");
+      }
+    }
+
+    // Increases volume
+    if (command == '+') {
+      myDFPlayer.volumeUp();
+      Serial.print("Current Volume:");
+      Serial.println(myDFPlayer.readVolume());
+    }
+    // Decreases volume
+    if (command == '-') {
+      myDFPlayer.volumeDown();
+      Serial.print("Current Volume:");
+      Serial.println(myDFPlayer.readVolume());
+    }
+
+    // Play previouse
+    if (command == '<') {
+      myDFPlayer.previous();
+      Serial.println("Previous:");
+      Serial.print("Current track:");
+      Serial.println(myDFPlayer.readCurrentFileNumber() - 1);
+    }
+
+    // Play next
+    if (command == '>') {
+      myDFPlayer.next();
+      Serial.println("Next:");
+      Serial.print("Current track:");
+      Serial.println(myDFPlayer.readCurrentFileNumber() + 1);
+    }
+  }
+}
+*/

@@ -8,7 +8,7 @@
 #include <HardwareSerial.h>
 #include <DFRobotDFPlayerMini.h>
 #include <Preferences.h>
-#include <Adafruit_TCA8418.h> // Biblioteca do controlador do teclado
+#include <Adafruit_TCA8418.h>
 
 #define NUM_LEDS 10
 
@@ -18,11 +18,19 @@ const int BOTAO_START       = 10;
 const int BOTAO_LEADERBOARD = 11;
 const int BOTAO_SAIR        = 12;
 
-const int PINS_PADS[4] = {13, 14, 27, 33};
-const int PINS_LEDS[4] = {18, 19, 21, 23};
+constexpr int PINS_PADS[4] = {13, 14, 27, 33};
+constexpr int PINS_LEDS[4] = {18, 19, 21, 23};
 
 #define DFPLAYER_RX 16
 #define DFPLAYER_TX 17
+
+#define BIT_INIT_DISPLAY (1 << 0)
+#define BIT_INIT_LEDS (1 << 1)
+#define BIT_INIT_AUDIO (1 << 2)
+#define BIT_INIT_KEYPAD (1 << 3)
+#define BIT_INIT_GAME (1 << 4)
+
+#define ALL_INIT_BITS (BIT_INIT_DISPLAY | BIT_INIT_LEDS | BIT_INIT_AUDIO | BIT_INIT_KEYPAD | BIT_INIT_GAME)
 
 // Instâncias Globais Externas
 extern DFRobotDFPlayerMini myDFPlayer;
@@ -61,6 +69,9 @@ struct ComandoLED {
 
 extern QueueHandle_t filaToques;
 extern QueueHandle_t filaLEDs;
+extern TaskHandle_t taskHandleInitDisplay, taskHandleInitLEDs, taskHandleInitAudio, taskHandleInitKeypad, taskHandleGameLogic;
+extern EventGroupHandle_t xInitEventGroup;
+
 
 void lerNomeTecladoTCA8418();
 

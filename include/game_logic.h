@@ -3,7 +3,7 @@
 
 #include "config.h"
 
-void initGameHardware();
+void initGameHardware(void *pvParameters);
 void TaskJogoLogic(void *pvParameters);
 
 #endif

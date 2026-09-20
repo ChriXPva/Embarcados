@@ -111,7 +111,7 @@ void IRAM_ATTR ISR_Pad(void* arg) {
     }
 }
 
-void initGameHardware() {
+void initGameHardware(void *pvParameters) {
     pinMode(BOTAO_DIFICULDADE, INPUT_PULLUP);
     pinMode(BOTAO_START, INPUT_PULLUP);
     pinMode(BOTAO_LEADERBOARD, INPUT_PULLUP);
@@ -126,6 +126,8 @@ void initGameHardware() {
 
     filaToques = xQueueCreate(10, sizeof(EventoToque));
     filaLEDs = xQueueCreate(5, sizeof(ComandoLED));
+
+    xEventGroupSetBits(xInitEventGroup, BIT_INIT_GAME);
 }
 
 void TaskJogoLogic(void *pvParameters) {
@@ -135,6 +137,34 @@ void TaskJogoLogic(void *pvParameters) {
     for (;;) {
         switch (estadoAtual) {
             case INIT:
+                EventBits_t bits = xEventGroupWaitBits(xInitEventGroup, ALL_INIT_BITS, pdFALSE, pdTRUE, portMAX_DELAY);
+                if ((bits & ALL_INIT_BITS) == ALL_INIT_BITS) {
+                    estadoAtual = MENU;
+                }else{
+                    Serial.println("\n[ERRO CRÍTICO] Falha na inicialização do sistema!");
+                    Serial.println("Módulos que não responderam:");
+                    if (!(bits & BIT_INIT_DISPLAY)) {
+                        Serial.println(" - Display LCD");
+                    }
+                    if (!(bits & BIT_INIT_LEDS)) {
+                        Serial.println(" - LEDs NeoPixel");
+                    }
+                    if (!(bits & BIT_INIT_AUDIO)) {
+                        Serial.println(" - Áudio (DFPlayer Mini)");
+                    }
+                    if (!(bits & BIT_INIT_KEYPAD)) {
+                        Serial.println(" - Teclado (TCA8418)");
+                    }
+                    if (!(bits & BIT_INIT_GAME)) {
+                        Serial.println(" - Hardware do Jogo / Filas");
+                    }
+
+                    // Trava a execução ou trata a falha com segurança alimentando o watchdog
+                    while (true) {
+                        vTaskDelay(pdMS_TO_TICKS(1000));
+                    }
+                }
+                
                 vTaskDelay(pdMS_TO_TICKS(500));
                 break;
 

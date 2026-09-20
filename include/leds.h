@@ -5,7 +5,7 @@
 
 extern Adafruit_NeoPixel strip[4];
 
-void initLeds();
+void initLeds(void *pvParameters);
 void TaskEfeitosLED(void *pvParameters);
 
 #endif
