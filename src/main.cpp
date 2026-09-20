@@ -5,7 +5,8 @@
 #include "keyboard.h"
 #include "game_logic.h"
 
-
+EventGroupHandle_t xInitEventGroup = NULL;
+TaskHandle_t taskHandleInitDisplay, taskHandleInitLEDs, taskHandleInitAudio, taskHandleInitKeypad, taskHandleGameLogic = NULL;
 
 void setup() {
     Serial.begin(115200);
