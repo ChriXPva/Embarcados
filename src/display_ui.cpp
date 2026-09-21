@@ -8,6 +8,10 @@ void initDisplay(void *pvParameters) {
     lcd.init();
     lcd.backlight();
     lcd.setCursor(0, 0);
+    lcd.print("INICIALIZANDO...");
+    lcd.clear();
+    lcd.setCursor(0, 0);
+
     for (int j = 0; j < 2; j++){
         for (int i = 0; i <= 15; i++) {
             lcd.print(".");
@@ -20,111 +24,64 @@ void initDisplay(void *pvParameters) {
 }
 
 void TaskLCD_UI(void *pvParameters) {
-    EstadoJogo estadoAnterior = GAMEOVER;
-    int indiceExibicaoRanking = 0; // Índice de 0 a 4 (Posição 1 a 5)
+    ComandoDisplay cmd;
 
     for (;;) {
-        // Atualiza a tela base quando muda o estado do jogo
-        if (estadoAtual != estadoAnterior) {
-            estadoAnterior = estadoAtual;
+        // A tarefa fica suspensa aguardando ordens de atualização vindas da Task do Jogo
+        if (xQueueReceive(filaDisplay, &cmd, portMAX_DELAY) == pdTRUE) {
             lcd.clear();
 
-            switch (estadoAtual) {
-                case INIT:
-                    lcd.setCursor(0, 0); lcd.print("INICIALIZANDO.....");
-                    vTaskDelay(pdMS_TO_TICKS(1500));
-                    lcd.clear(); lcd.setCursor(0, 0); lcd.print("ENTRANDO NA VIBE...");
-                    vTaskDelay(pdMS_TO_TICKS(1500));
-                    lcd.clear(); lcd.setCursor(0, 0); lcd.print("REGULANDO ENGRENAGENS..");
-                    vTaskDelay(pdMS_TO_TICKS(1500));
-                    estadoAtual = MENU;
-                    break;
-
-                case MENU:
-                    lcd.setCursor(0, 0); lcd.print("1: START -> JOGAR");
-                    lcd.setCursor(0, 1); lcd.print("2: BTN 11 -> RANKING");
-                    break;
-
-                case REGISTRAR_NOME:
-                    // O controle da tela durante a digitação é feito em lerNomeTecladoTCA8418
-                    break;
-
-                case LEADERBOARD:
-                    indiceExibicaoRanking = 0; // Inicia sempre na 1ª posição (TOP 1)
-                    tca.flush(); // Limpa eventos antigos de tecla
-                    break;
-
-                case PREPARAR:
+            switch (cmd.tipo) {
+                case DISPLAY_INIT:
                     lcd.setCursor(0, 0);
-                    lcd.print(modoDificuldade == 0 ? "MODO FACIL" : "MODO DIFICIL");
-                    lcd.setCursor(0, 1); lcd.print("PREPARE-SE ");
-                    lcd.print(nomeJogadorAtual);
-                    vTaskDelay(pdMS_TO_TICKS(1500));
-                    estadoAtual = JOGANDO;
+                    lcd.print("CARREGANDO...");
                     break;
 
-                case JOGANDO:
-                    lcd.setCursor(0, 0); lcd.print("Bora!");
-                    lcd.setCursor(0, 1); lcd.print("Vidas: "); lcd.print(vidas);
+                case DISPLAY_MENU:
+                    lcd.setCursor(0, 0); 
+                    lcd.print("1:START->JOGAR");
+                    lcd.setCursor(0, 1); 
+                    lcd.print("2:BTN11->RANKING");
                     break;
 
-                case GAMEOVER:
-                    lcd.setCursor(0, 0); lcd.print("FIM DE JOGO!");
-                    lcd.setCursor(0, 1); lcd.print("Pontos: ");
-                    lcd.print((int)pontuacaoTotal);
+                case DISPLAY_PREPARAR:
+                    lcd.setCursor(0, 0);
+                    lcd.print(cmd.modoDificuldade == 0 ? "MODO FACIL" : "MODO DIFICIL");
+                    lcd.setCursor(0, 1); 
+                    lcd.print("PREPARE: ");
+                    lcd.print(cmd.nomeJogador);
+                    break;
+
+                case DISPLAY_JOGANDO:
+                    lcd.setCursor(0, 0); 
+                    lcd.print("Bora!");
+                    lcd.setCursor(0, 1); 
+                    lcd.print("Vidas: "); 
+                    lcd.print(cmd.vidas);
+                    break;
+
+                case DISPLAY_LEADERBOARD:
+                    lcd.setCursor(0, 0);
+                    lcd.print("=== RANKING ===");
+                    lcd.setCursor(0, 1);
+                    
+                    // Exemplo: "1. Carlos - 850pts"
+                    lcd.print(cmd.posicaoRanking + 1);
+                    lcd.print(". ");
+                    lcd.print(cmd.nomeJogador);
+                    lcd.print(" - ");
+                    lcd.print((int)cmd.pontuacao);
+                    lcd.print("pts");
+                    break;
+
+                case DISPLAY_GAMEOVER:
+                    lcd.setCursor(0, 0); 
+                    lcd.print("FIM DE JOGO!");
+                    lcd.setCursor(0, 1); 
+                    lcd.print("Pontos: ");
+                    lcd.print((int)cmd.pontuacao);
                     break;
             }
         }
-
-        // --- LÓGICA DE NAVEGAÇÃO DO LEADERBOARD ---
-        if (estadoAtual == LEADERBOARD) {
-            // Leitura de comandos do teclado TCA8418 para navegação
-            if (tca.available() > 0) {
-                uint8_t event = tca.getEvent();
-                // Processa apenas quando a tecla é PRESSIONADA (bit 0x80 ativo)
-                if (event & 0x80) { 
-                    char tecla = traduzirEventoTCA(event);
-
-                    if (tecla == '#') {
-                        // Avança para a próxima posição (máximo: posição 5, índice 4)
-                        if (indiceExibicaoRanking < 4) {
-                            indiceExibicaoRanking++;
-                        }
-                    } 
-                    else if (tecla == '*') {
-                        // Volta uma posição (mínimo: posição 1, índice 0)
-                        if (indiceExibicaoRanking > 0) {
-                            indiceExibicaoRanking--;
-                        }
-                    } 
-                    else if (tecla == '0') {
-                        // Volta para o Menu Principal
-                        estadoAtual = MENU;
-                    }
-                }
-            }
-
-            // Exibe exatamente no formato solicitado:
-            // "Posição. Nome escolhido - Pontuação pts"
-            // Exemplo: "1. Carlos - 850 pts"
-            lcd.setCursor(0, 0);
-            lcd.print("=== LEADERBOARD ===");
-            lcd.setCursor(0, 1);
-            
-            // Imprime "Posição. Nome - Pontos pts"
-            lcd.print(indiceExibicaoRanking + 1);
-            lcd.print(". ");
-            lcd.print(leaderboard[indiceExibicaoRanking].nome);
-            lcd.print(" - ");
-            lcd.print((int)leaderboard[indiceExibicaoRanking].pontuacao);
-            lcd.print(" pts    "); // Espaços ao final para limpar caracteres antigos
-        }
-
-        if (estadoAtual == JOGANDO) {
-            lcd.setCursor(7, 1);
-            lcd.print(vidas);
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(50)); // Atualização da Task LCD
     }
 }

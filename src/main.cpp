@@ -10,7 +10,11 @@ TaskHandle_t taskHandleInitDisplay, taskHandleInitLEDs, taskHandleInitAudio, tas
 
 void setup() {
     Serial.begin(115200);
-    xInitEventGroup = xEventGroupCreate(); 
+    xInitEventGroup = xEventGroupCreate();
+    filaToques      = xQueueCreate(10, sizeof(EventoToque));
+    filaLEDs       = xQueueCreate(10, sizeof(ComandoLED));
+    filaAudio      = xQueueCreate(5,  sizeof(ComandoAudio));
+    filaDisplay = xQueueCreate(5, sizeof(ComandoDisplay)); 
     // Criação das Tasks no FreeRTOS
     xTaskCreatePinnedToCore(initDisplay,"Logic", 4096, NULL, 1, &taskHandleInitDisplay, 1);
     xTaskCreatePinnedToCore(initLeds,"LEDs",  2048, NULL, 1, &taskHandleInitLEDs, 1);

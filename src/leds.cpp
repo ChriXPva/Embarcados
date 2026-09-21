@@ -1,13 +1,13 @@
 #include "leds.h"
 
-Adafruit_NeoPixel strip[4] = {
+static Adafruit_NeoPixel strip[4] = {
     Adafruit_NeoPixel(NUM_LEDS, PINS_LEDS[0], NEO_GRB + NEO_KHZ800),
     Adafruit_NeoPixel(NUM_LEDS, PINS_LEDS[1], NEO_GRB + NEO_KHZ800),
     Adafruit_NeoPixel(NUM_LEDS, PINS_LEDS[2], NEO_GRB + NEO_KHZ800),
     Adafruit_NeoPixel(NUM_LEDS, PINS_LEDS[3], NEO_GRB + NEO_KHZ800)
 };
 
-uint32_t getRandomColor() {
+static uint32_t getRandomColor() {
     return strip[0].Color(random(0, 256), random(0, 256), random(0, 256));
 }
 
@@ -61,25 +61,30 @@ void initLeds(void *pvParameters) {
 
 void TaskEfeitosLED(void *pvParameters) {
     ComandoLED comando;
+
     for (;;) {
         if (xQueueReceive(filaLEDs, &comando, portMAX_DELAY) == pdTRUE) {
-            if (comando.tipoEfeito == 0) {
-                strip[comando.indicePad].clear();
-                strip[comando.indicePad].show();
-            } 
-            else if (comando.tipoEfeito == 1) {
-                for (int i = 0; i < NUM_LEDS; i++) {
-                    strip[comando.indicePad].setPixelColor(i, comando.cor);
-                }
-                strip[comando.indicePad].show();
-            } 
-            else if (comando.tipoEfeito == 2) {
-                strip[comando.indicePad].clear();
-                for (int i = 0; i < NUM_LEDS; i++) {
-                    strip[comando.indicePad].setPixelColor(i, comando.cor);
+            if (comando.indicePad < 0 || comando.indicePad >= 4) continue;
+
+            switch (comando.tipoEfeito) {
+                case 0:
+                    strip[comando.indicePad].clear();
                     strip[comando.indicePad].show();
-                    vTaskDelay(pdMS_TO_TICKS(50));
-                }
+                    break;
+                case 1:
+                    for (int i = 0; i < NUM_LEDS; i++) {
+                        strip[comando.indicePad].setPixelColor(i, comando.cor);
+                    }
+                    strip[comando.indicePad].show();
+                    break;
+                case 2:
+                    strip[comando.indicePad].clear();
+                    for (int i = 0; i < NUM_LEDS; i++) {
+                        strip[comando.indicePad].setPixelColor(i, comando.cor);
+                        strip[comando.indicePad].show();
+                        vTaskDelay(pdMS_TO_TICKS(50));
+                    }
+                    break;
             }
         }
     }

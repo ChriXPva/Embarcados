@@ -32,29 +32,21 @@ constexpr int PINS_LEDS[4] = {18, 19, 21, 23};
 
 #define ALL_INIT_BITS (BIT_INIT_DISPLAY | BIT_INIT_LEDS | BIT_INIT_AUDIO | BIT_INIT_KEYPAD | BIT_INIT_GAME)
 
-// Instâncias Globais Externas
-extern DFRobotDFPlayerMini myDFPlayer;
-extern Adafruit_NeoPixel strip[4];
-extern Adafruit_TCA8418 tca;
-
 // Estados do Jogo
 enum EstadoJogo { INIT, MENU, LEADERBOARD, REGISTRAR_NOME, PREPARAR, JOGANDO, GAMEOVER };
-extern volatile EstadoJogo estadoAtual;
-
-// Estrutura do Ranking
+enum TipoMensagemDisplay {DISPLAY_INIT,DISPLAY_MENU,DISPLAY_PREPARAR,DISPLAY_JOGANDO,DISPLAY_LEADERBOARD,DISPLAY_GAMEOVER};
+struct ComandoDisplay {
+    TipoMensagemDisplay tipo;
+    int vidas;
+    float pontuacao;
+    int modoDificuldade;
+    char nomeJogador[11];
+    int posicaoRanking; // Para o Leaderboard (0 a 4)
+};
 struct Jogador {
     char nome[11];
     float pontuacao;
 };
-
-extern Jogador leaderboard[5];
-extern char nomeJogadorAtual[11];
-extern int vidas;
-extern int indicePadAtual;
-extern unsigned long tempoDeAtivacao;
-extern unsigned long instanteAtivacaoPad;
-extern int modoDificuldade;
-extern float pontuacaoTotal;
 
 struct EventoToque {
     int indicePad;
@@ -67,8 +59,28 @@ struct ComandoLED {
     uint32_t cor;
 };
 
+struct ComandoAudio {
+    int trackId;
+    int volume;
+};
+
+enum AcaoAudio {
+    AUDIO_PLAY_FOLDER,
+    AUDIO_PAUSE,
+    AUDIO_START,
+    AUDIO_STOP
+};
+
+struct ComandoAudio {
+    AcaoAudio acao;
+    int pasta;
+    int faixa;
+};
+
 extern QueueHandle_t filaToques;
 extern QueueHandle_t filaLEDs;
+extern QueueHandle_t filaAudio;
+extern QueueHandle_t filaDisplay;
 extern TaskHandle_t taskHandleInitDisplay, taskHandleInitLEDs, taskHandleInitAudio, taskHandleInitKeypad, taskHandleGameLogic;
 extern EventGroupHandle_t xInitEventGroup;
 

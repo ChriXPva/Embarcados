@@ -1,29 +1,28 @@
 #include "game_logic.h"
 
-volatile EstadoJogo estadoAtual = INIT;
-int vidas = 3;
-int indicePadAtual = -1;
-unsigned long tempoDeAtivacao = 3000;
-unsigned long instanteAtivacaoPad = 0;
-int modoDificuldade = 0;
-float pontuacaoTotal = 0.0;
-float somaTemposResposta = 0.0;
-int totalAcertos = 0;
+// ============================================================================
+// VARIÁVEIS LOCAIS / ESTÁTICAS DESTE MÓDULO (Protegidas em game_logic.cpp)
+// ============================================================================
+static Preferences prefs;
+static volatile unsigned long ultimoTempoInterrupcao[4] = {0, 0, 0, 0};
+static const unsigned long TEMPO_DEBOUNCE_MS = 150;
 
-Jogador leaderboard[5];
-char nomeJogadorAtual[11] = "Player";
+// Constante para definir a cor (Azul RGB) sem depender do objeto Adafruit_NeoPixel
+static const uint32_t COR_AZUL = 0x0000FF;
 
-Preferences prefs;
+// Helper para envio limpo de comandos para a fila de áudio
+static void enviarComandoAudio(AcaoAudio acao, int pasta = 0, int faixa = 0) {
+    if (filaAudio != NULL) {
+        ComandoAudio cmd = {acao, pasta, faixa};
+        xQueueSend(filaAudio, &cmd, pdMS_TO_TICKS(50));
+    }
+}
 
-QueueHandle_t filaToques;
-QueueHandle_t filaLEDs;
-
-volatile unsigned long ultimoTempoInterrupcao[4] = {0, 0, 0, 0};
-const unsigned long TEMPO_DEBOUNCE_MS = 150;
-
-// Carrega o ranking da memória Flash (NVS)
-void carregarLeaderboard() {
-    prefs.begin("leaderboard", true); // Abre em modo leitura
+// ============================================================================
+// GERENCIAMENTO DO LEADERBOARD (NVS / FLASH)
+// ============================================================================
+static void carregarLeaderboard(Jogador* leaderboard) {
+    prefs.begin("leaderboard", true); // Modo leitura
     for (int i = 0; i < 5; i++) {
         String chaveNome = "nome" + String(i);
         String chavePontos = "pts" + String(i);
@@ -37,9 +36,8 @@ void carregarLeaderboard() {
     prefs.end();
 }
 
-// Salva o ranking na memória Flash (NVS)
-void salvarLeaderboard() {
-    prefs.begin("leaderboard", false); // Abre em modo escrita
+static void salvarLeaderboard(const Jogador* leaderboard) {
+    prefs.begin("leaderboard", false); // Modo escrita
     for (int i = 0; i < 5; i++) {
         String chaveNome = "nome" + String(i);
         String chavePontos = "pts" + String(i);
@@ -50,49 +48,25 @@ void salvarLeaderboard() {
     prefs.end();
 }
 
-// Verifica e insere a nova pontuação no TOP 5 se qualificado
-void atualizarRanking(const char* nome, float pontos) {
+static void atualizarRanking(Jogador* leaderboard, const char* nome, float pontos) {
     for (int i = 0; i < 5; i++) {
         if (pontos > leaderboard[i].pontuacao) {
-            // Desloca as posições inferiores para baixo
             for (int j = 4; j > i; j--) {
                 leaderboard[j] = leaderboard[j - 1];
             }
-            // Insere o novo jogador na posição corrente
             strncpy(leaderboard[i].nome, nome, 10);
             leaderboard[i].nome[10] = '\0';
             leaderboard[i].pontuacao = pontos;
 
-            salvarLeaderboard(); // Persiste no Flash
+            salvarLeaderboard(leaderboard);
             break;
         }
     }
 }
 
-void lerNomeSerial() {
-    Serial.println("\n==========================================");
-    Serial.println(" NOVO JOGO! DIGITE SEU NOME NO TERMINAL: ");
-    Serial.println("==========================================");
-
-    // Esvazia buffer da serial
-    while (Serial.available()) Serial.read();
-
-    while (true) {
-        if (Serial.available() > 0) {
-            String entrada = Serial.readStringUntil('\n');
-            entrada.trim();
-            if (entrada.length() > 0) {
-                strncpy(nomeJogadorAtual, entrada.c_str(), 10);
-                nomeJogadorAtual[10] = '\0';
-                Serial.print("Nome Cadastrado: ");
-                Serial.println(nomeJogadorAtual);
-                break;
-            }
-        }
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-}
-
+// ============================================================================
+// INTERRUPÇÃO E HARDWARE
+// ============================================================================
 void IRAM_ATTR ISR_Pad(void* arg) {
     int indicePad = (int)(intptr_t)arg;
     unsigned long agora = millis();
@@ -100,7 +74,8 @@ void IRAM_ATTR ISR_Pad(void* arg) {
     if (agora - ultimoTempoInterrupcao[indicePad] > TEMPO_DEBOUNCE_MS) {
         ultimoTempoInterrupcao[indicePad] = agora;
 
-        if (estadoAtual == JOGANDO) {
+        // O envio via fila do FreeRTOS continua thread-safe direto da ISR
+        if (filaToques != NULL) {
             EventoToque evento = {indicePad, agora};
             BaseType_t xHigherPriorityTaskWoken = pdFALSE;
             xQueueSendFromISR(filaToques, &evento, &xHigherPriorityTaskWoken);
@@ -122,26 +97,46 @@ void initGameHardware(void *pvParameters) {
         attachInterruptArg(digitalPinToInterrupt(PINS_PADS[i]), ISR_Pad, (void*)(intptr_t)i, FALLING);
     }
 
-    carregarLeaderboard(); // Carrega os melhores tempos ao ligar a placa
-
-    filaToques = xQueueCreate(10, sizeof(EventoToque));
-    filaLEDs = xQueueCreate(5, sizeof(ComandoLED));
-
+    // Sinaliza no EventGroup que os pinos e interrupções estão prontos
     xEventGroupSetBits(xInitEventGroup, BIT_INIT_GAME);
+    
+    // Deleta esta task de init para liberar a pilha (RAM)
     vTaskDelete(NULL);
 }
 
+// ============================================================================
+// LÓGICA PRINCIPAL DO JOGO (MAQUINA DE ESTADOS)
+// ============================================================================
 void TaskJogoLogic(void *pvParameters) {
+    // Variáveis de estado do jogo isoladas internamente na Task (Sem Race Conditions)
+    EstadoJogo estadoAtual = INIT;
+    int vidas = 3;
+    int indicePadAtual = -1;
+    unsigned long tempoDeAtivacao = 3000;
+    unsigned long instanteAtivacaoPad = 0;
+    int modoDificuldade = 0;
+    float pontuacaoTotal = 0.0;
+    float somaTemposResposta = 0.0;
+    int totalAcertos = 0;
+
+    Jogador leaderboard[5];
+    char nomeJogadorAtual[11] = "Player";
+
     EventoToque evento;
     ComandoLED cmdLed;
+    ComandoDisplay cmdDisplay;
+
+    // Carrega o ranking persistente na memória da task local
+    carregarLeaderboard(leaderboard);
 
     for (;;) {
         switch (estadoAtual) {
             case INIT: {
+                // Aguarda todos os subsistemas sinalizarem inicialização
                 EventBits_t bits = xEventGroupWaitBits(xInitEventGroup, ALL_INIT_BITS, pdFALSE, pdTRUE, portMAX_DELAY);
                 if ((bits & ALL_INIT_BITS) == ALL_INIT_BITS) {
                     estadoAtual = MENU;
-                }else{
+                } else {
                     Serial.println("\n[ERRO CRÍTICO] Falha na inicialização do sistema!");
                     Serial.println("Módulos que não responderam:");
                     if (!(bits & BIT_INIT_DISPLAY)) {Serial.println(" - Display LCD");}
@@ -149,16 +144,14 @@ void TaskJogoLogic(void *pvParameters) {
                     if (!(bits & BIT_INIT_AUDIO)) {Serial.println(" - Áudio (DFPlayer Mini)");}
                     if (!(bits & BIT_INIT_KEYPAD)) {Serial.println(" - Teclado (TCA8418)");}
                     if (!(bits & BIT_INIT_GAME)) {Serial.println(" - Hardware do Jogo / Filas");}
-
-                    // Trava a execução ou trata a falha com segurança alimentando o watchdog
                     while (true) {
                         vTaskDelay(pdMS_TO_TICKS(1000));
                     }
                 }
-                
                 vTaskDelay(pdMS_TO_TICKS(500));
-                }
                 break;
+            }
+
             case MENU:
                 if (digitalRead(BOTAO_START) == LOW) {
                     estadoAtual = REGISTRAR_NOME;
@@ -179,7 +172,7 @@ void TaskJogoLogic(void *pvParameters) {
                 break;
 
             case REGISTRAR_NOME:
-                lerNomeTecladoTCA8418(); // Realiza a digitação Multi-tap via Adafruit TCA8418
+                lerNomeTecladoTCA8418(); // Preenche o nome
                 estadoAtual = PREPARAR;
                 break;
 
@@ -189,32 +182,38 @@ void TaskJogoLogic(void *pvParameters) {
                 tempoDeAtivacao = 3000;
                 totalAcertos = 0;
                 somaTemposResposta = 0.0;
-                xQueueReset(filaToques);
                 
-                while(estadoAtual == PREPARAR) {
+                if (filaToques != NULL) {
+                    xQueueReset(filaToques);
+                }
+                
+                while (estadoAtual == PREPARAR) {
                     vTaskDelay(pdMS_TO_TICKS(50));
                 }
                 
-                myDFPlayer.playFolder(1, 1);
+                // Solicita áudio via fila em vez de chamar diretamente myDFPlayer
+                enviarComandoAudio(AUDIO_PLAY_FOLDER, 1, 1);
                 vTaskDelay(pdMS_TO_TICKS(1000));
 
                 indicePadAtual = random(0, 4);
-                cmdLed = {indicePadAtual, modoDificuldade == 0 ? 2 : 1, strip[0].Color(0, 0, 255)};
+                cmdLed = {indicePadAtual, modoDificuldade == 0 ? 2 : 1, COR_AZUL};
                 xQueueSend(filaLEDs, &cmdLed, portMAX_DELAY);
                 
                 instanteAtivacaoPad = millis();
+                estadoAtual = JOGANDO;
                 break;
 
             case JOGANDO:
                 if (digitalRead(BOTAO_SAIR) == LOW) {
                     estadoAtual = GAMEOVER;
-                    myDFPlayer.stop();
+                    enviarComandoAudio(AUDIO_STOP);
                     cmdLed = {indicePadAtual, 0, 0};
                     xQueueSend(filaLEDs, &cmdLed, 0);
                     vTaskDelay(pdMS_TO_TICKS(300));
                     break;
                 }
 
+                // Aguarda evento de toque com o timeout igual ao tempo limite de reação
                 if (xQueueReceive(filaToques, &evento, pdMS_TO_TICKS(tempoDeAtivacao)) == pdTRUE) {
                     if (evento.indicePad == indicePadAtual) {
                         float tempoReacao = (float)(evento.instanteToque - instanteAtivacaoPad);
@@ -225,13 +224,15 @@ void TaskJogoLogic(void *pvParameters) {
                         if (pontoDaVez < 0) pontoDaVez = 0;
                         pontuacaoTotal += pontoDaVez;
 
+                        // Apaga o pad atingido
                         cmdLed = {indicePadAtual, 0, 0};
                         xQueueSend(filaLEDs, &cmdLed, 0);
 
-                        vTaskDelay(pdMS_TO_TICKS(1000)); // Tempo morto de 1s
+                        vTaskDelay(pdMS_TO_TICKS(1000)); // Intervalo
 
+                        // Seleciona o novo pad aleatório
                         indicePadAtual = random(0, 4);
-                        cmdLed = {indicePadAtual, modoDificuldade == 0 ? 2 : 1, strip[0].Color(0, 0, 255)};
+                        cmdLed = {indicePadAtual, modoDificuldade == 0 ? 2 : 1, COR_AZUL};
                         xQueueSend(filaLEDs, &cmdLed, 0);
                         
                         instanteAtivacaoPad = millis();
@@ -239,6 +240,7 @@ void TaskJogoLogic(void *pvParameters) {
                         goto TratarErro;
                     }
                 } else {
+                    // Timeout (jogador não respondeu a tempo)
                     goto TratarErro;
                 }
                 break;
@@ -248,30 +250,30 @@ void TaskJogoLogic(void *pvParameters) {
                 cmdLed = {indicePadAtual, 0, 0};
                 xQueueSend(filaLEDs, &cmdLed, 0);
 
-                myDFPlayer.pause(); 
+                enviarComandoAudio(AUDIO_PAUSE);
                 vTaskDelay(pdMS_TO_TICKS(100)); 
 
-                myDFPlayer.playFolder(1, 2); // Som de erro
-                vTaskDelay(pdMS_TO_TICKS(5000)); // Pausa de 5s para respirar
+                enviarComandoAudio(AUDIO_PLAY_FOLDER, 1, 2); // Som de erro/falha
+                vTaskDelay(pdMS_TO_TICKS(5000));
 
                 if (vidas <= 0) {
-                    atualizarRanking(nomeJogadorAtual, pontuacaoTotal); // Registra no Ranking Persistente
+                    atualizarRanking(leaderboard, nomeJogadorAtual, pontuacaoTotal);
                     estadoAtual = GAMEOVER;
                 } else {
-                    xQueueReset(filaToques);
-                    myDFPlayer.start();
+                    if (filaToques != NULL) xQueueReset(filaToques);
+                    enviarComandoAudio(AUDIO_START);
                     
-                    vTaskDelay(pdMS_TO_TICKS(1000)); // Tempo morto
+                    vTaskDelay(pdMS_TO_TICKS(1000));
 
                     indicePadAtual = random(0, 4);
-                    cmdLed = {indicePadAtual, modoDificuldade == 0 ? 2 : 1, strip[0].Color(0, 0, 255)};
+                    cmdLed = {indicePadAtual, modoDificuldade == 0 ? 2 : 1, COR_AZUL};
                     xQueueSend(filaLEDs, &cmdLed, 0);
                     instanteAtivacaoPad = millis();
                 }
                 break;
 
             case GAMEOVER:
-                myDFPlayer.stop();
+                enviarComandoAudio(AUDIO_STOP);
                 if (digitalRead(BOTAO_START) == LOW) {
                     estadoAtual = MENU;
                     vTaskDelay(pdMS_TO_TICKS(300));
