@@ -6,9 +6,16 @@
 #include "game_logic.h"
 
 EventGroupHandle_t xInitEventGroup = NULL;
-TaskHandle_t taskHandleInitDisplay, taskHandleInitLEDs, taskHandleInitAudio, taskHandleInitKeypad, taskHandleGameLogic = NULL;
-QueueHandle_t filaToques, filaLEDs,filaAudio,filaDisplay = NULL;
+TaskHandle_t taskHandleInitDisplay=NULL;
+TaskHandle_t taskHandleInitLEDs=NULL;
+TaskHandle_t taskHandleInitAudio=NULL;
+TaskHandle_t taskHandleInitKeypad=NULL;
+TaskHandle_t taskHandleGameLogic = NULL;
 
+QueueHandle_t filaToques = NULL;
+QueueHandle_t filaLEDs = NULL;
+QueueHandle_t filaAudio = NULL;
+QueueHandle_t filaDisplay = NULL;
 void setup() {
     Serial.begin(115200);
     xInitEventGroup = xEventGroupCreate();
