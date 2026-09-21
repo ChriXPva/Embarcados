@@ -3,8 +3,6 @@
 
 #include "config.h"
 
-extern LiquidCrystal_I2C lcd;
-
 void initDisplay(void *pvParameters);
 void TaskLCD_UI(void *pvParameters);
 

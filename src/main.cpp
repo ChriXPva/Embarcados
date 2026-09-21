@@ -7,6 +7,7 @@
 
 EventGroupHandle_t xInitEventGroup = NULL;
 TaskHandle_t taskHandleInitDisplay, taskHandleInitLEDs, taskHandleInitAudio, taskHandleInitKeypad, taskHandleGameLogic = NULL;
+QueueHandle_t filaToques, filaLEDs,filaAudio,filaDisplay = NULL;
 
 void setup() {
     Serial.begin(115200);

@@ -1,8 +1,5 @@
 #include "game_logic.h"
 
-// ============================================================================
-// VARIÁVEIS LOCAIS / ESTÁTICAS DESTE MÓDULO (Protegidas em game_logic.cpp)
-// ============================================================================
 static Preferences prefs;
 static volatile unsigned long ultimoTempoInterrupcao[4] = {0, 0, 0, 0};
 static const unsigned long TEMPO_DEBOUNCE_MS = 150;
@@ -11,16 +8,13 @@ static const unsigned long TEMPO_DEBOUNCE_MS = 150;
 static const uint32_t COR_AZUL = 0x0000FF;
 
 // Helper para envio limpo de comandos para a fila de áudio
-static void enviarComandoAudio(AcaoAudio acao, int pasta = 0, int faixa = 0) {
+static void enviarComandoAudio(AcaoAudio acao, int faixa = 0) {
     if (filaAudio != NULL) {
-        ComandoAudio cmd = {acao, pasta, faixa};
+        ComandoAudio cmd = {acao, faixa};
         xQueueSend(filaAudio, &cmd, pdMS_TO_TICKS(50));
     }
 }
 
-// ============================================================================
-// GERENCIAMENTO DO LEADERBOARD (NVS / FLASH)
-// ============================================================================
 static void carregarLeaderboard(Jogador* leaderboard) {
     prefs.begin("leaderboard", true); // Modo leitura
     for (int i = 0; i < 5; i++) {
@@ -64,9 +58,7 @@ static void atualizarRanking(Jogador* leaderboard, const char* nome, float ponto
     }
 }
 
-// ============================================================================
-// INTERRUPÇÃO E HARDWARE
-// ============================================================================
+
 void IRAM_ATTR ISR_Pad(void* arg) {
     int indicePad = (int)(intptr_t)arg;
     unsigned long agora = millis();
@@ -104,9 +96,6 @@ void initGameHardware(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
-// ============================================================================
-// LÓGICA PRINCIPAL DO JOGO (MAQUINA DE ESTADOS)
-// ============================================================================
 void TaskJogoLogic(void *pvParameters) {
     // Variáveis de estado do jogo isoladas internamente na Task (Sem Race Conditions)
     EstadoJogo estadoAtual = INIT;
@@ -192,7 +181,7 @@ void TaskJogoLogic(void *pvParameters) {
                 }
                 
                 // Solicita áudio via fila em vez de chamar diretamente myDFPlayer
-                enviarComandoAudio(AUDIO_PLAY_FOLDER, 1, 1);
+                enviarComandoAudio(AUDIO_PLAY, 1);
                 vTaskDelay(pdMS_TO_TICKS(1000));
 
                 indicePadAtual = random(0, 4);
@@ -253,7 +242,7 @@ void TaskJogoLogic(void *pvParameters) {
                 enviarComandoAudio(AUDIO_PAUSE);
                 vTaskDelay(pdMS_TO_TICKS(100)); 
 
-                enviarComandoAudio(AUDIO_PLAY_FOLDER, 1, 2); // Som de erro/falha
+                enviarComandoAudio(AUDIO_PLAY, 2); // Som de erro/falha
                 vTaskDelay(pdMS_TO_TICKS(5000));
 
                 if (vidas <= 0) {

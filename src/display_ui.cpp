@@ -1,7 +1,7 @@
 #include "display_ui.h"
 #include "keyboard.h"
 
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+static LiquidCrystal_I2C lcd(0x27, 16, 2); // Endereço I2C do display LCD 16x2
 
 void initDisplay(void *pvParameters) {
     Wire.begin();
@@ -39,9 +39,9 @@ void TaskLCD_UI(void *pvParameters) {
 
                 case DISPLAY_MENU:
                     lcd.setCursor(0, 0); 
-                    lcd.print("1:START->JOGAR");
+                    lcd.print("1: # ->JOGAR");
                     lcd.setCursor(0, 1); 
-                    lcd.print("2:BTN11->RANKING");
+                    lcd.print("2: * ->RANKING");
                     break;
 
                 case DISPLAY_PREPARAR:
@@ -81,7 +81,18 @@ void TaskLCD_UI(void *pvParameters) {
                     lcd.print("Pontos: ");
                     lcd.print((int)cmd.pontuacao);
                     break;
+
+                case DISPLAY_TEXTO:
+                    lcd.setCursor(0, 0);
+                    lcd.print(cmd.textoLinha1);
+                    lcd.setCursor(0, 1);
+                    lcd.print(cmd.textoLinha2);
+                    vTaskDelay(pdMS_TO_TICKS(3000)); 
+                    lcd.clear();
+                    break;
             }
         }
     }
 }
+
+

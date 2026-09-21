@@ -3,9 +3,6 @@
 
 #include "config.h"
 
-extern HardwareSerial mySoftwareSerial;
-extern DFRobotDFPlayerMini myDFPlayer;
-
 void initAudio(void *pvParameters);
 
 #endif

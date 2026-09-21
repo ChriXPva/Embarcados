@@ -1,11 +1,31 @@
 #include "leds.h"
 
+TimerHandle_t timerApagarLED[4];
+
 static Adafruit_NeoPixel strip[4] = {
     Adafruit_NeoPixel(NUM_LEDS, PINS_LEDS[0], NEO_GRB + NEO_KHZ800),
     Adafruit_NeoPixel(NUM_LEDS, PINS_LEDS[1], NEO_GRB + NEO_KHZ800),
     Adafruit_NeoPixel(NUM_LEDS, PINS_LEDS[2], NEO_GRB + NEO_KHZ800),
     Adafruit_NeoPixel(NUM_LEDS, PINS_LEDS[3], NEO_GRB + NEO_KHZ800)
 };
+
+void callbackApagarLED(TimerHandle_t xTimer) {
+    int indicePad = (int) pvTimerGetTimerID(xTimer);
+    strip[indicePad].clear();
+    strip[indicePad].show();
+}
+
+void initTimersLED(void) {
+    for (int i = 0; i < 4; i++) {
+        timerApagarLED[i] = xTimerCreate(
+            "TimerApagarLED",
+            pdMS_TO_TICKS(3000),
+            pdFALSE,
+            (void *) i,
+            callbackApagarLED
+        );
+    }
+}
 
 static uint32_t getRandomColor() {
     return strip[0].Color(random(0, 256), random(0, 256), random(0, 256));
@@ -67,23 +87,22 @@ void TaskEfeitosLED(void *pvParameters) {
             if (comando.indicePad < 0 || comando.indicePad >= 4) continue;
 
             switch (comando.tipoEfeito) {
-                case 0:
-                    strip[comando.indicePad].clear();
-                    strip[comando.indicePad].show();
-                    break;
                 case 1:
-                    for (int i = 0; i < NUM_LEDS; i++) {
-                        strip[comando.indicePad].setPixelColor(i, comando.cor);
-                    }
-                    strip[comando.indicePad].show();
+                    // Modo Difícil: Não faz nada (LEDs não acendem)
                     break;
+
                 case 2:
+                    // Modo Fácil: Acendimento gradual
                     strip[comando.indicePad].clear();
                     for (int i = 0; i < NUM_LEDS; i++) {
                         strip[comando.indicePad].setPixelColor(i, comando.cor);
                         strip[comando.indicePad].show();
                         vTaskDelay(pdMS_TO_TICKS(50));
                     }
+
+                    // Reinicia/Inicia a contagem regressiva de 3s em background
+                    // (Se o jogador apertar o mesmo pad de novo, o tempo recomeça do zero)
+                    xTimerReset(timerApagarLED[comando.indicePad], 0);
                     break;
             }
         }

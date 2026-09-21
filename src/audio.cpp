@@ -1,4 +1,5 @@
 #include "audio.h"
+#include "display_ui.h"
 
 static DFRobotDFPlayerMini myDFPlayer;
 
@@ -6,7 +7,11 @@ void initAudio(void *pvParameters) {
     Serial2.begin(9600, SERIAL_8N1, DFPLAYER_RX, DFPLAYER_TX);
 
     if (!myDFPlayer.begin(Serial2)) {
-        Serial.println(F("Erro no DFPlayer Mini"));
+        ComandoDisplay cmdErro;
+        cmdErro.tipo = DISPLAY_TEXTO;
+        strncpy(cmdErro.textoLinha1, "ERRO NO AUDIO!", sizeof(cmdErro.textoLinha1));
+        strncpy(cmdErro.textoLinha2, "DFPlayer Falhou", sizeof(cmdErro.textoLinha2));
+        xQueueSend(filaDisplay, &cmdErro, 0);
         while (true) vTaskDelay(pdMS_TO_TICKS(100));
     }
 
@@ -25,8 +30,8 @@ void TaskAudio(void *pvParameters) {
     for (;;) {
         if (xQueueReceive(filaAudio, &cmd, portMAX_DELAY) == pdTRUE) {
             switch (cmd.acao) {
-                case AUDIO_PLAY_FOLDER:
-                    myDFPlayer.playFolder(cmd.pasta, cmd.faixa);
+                case AUDIO_PLAY:
+                    myDFPlayer.play(cmd.faixa);
                     break;
                 case AUDIO_PAUSE:
                     myDFPlayer.pause();

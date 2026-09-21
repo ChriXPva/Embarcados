@@ -1,8 +1,8 @@
 #include "keyboard.h"
 #include "display_ui.h"
 
-Adafruit_TCA8418 tca;
-Preferences preferences;
+static Adafruit_TCA8418 tca;
+static Preferences preferences;
 
 char nomeJogadorAtual[11] = "JOGADOR";
 
@@ -74,7 +74,10 @@ const char* getCaracteresDaTecla(char tecla) {
 
 void initKeypad(void *pvParameters) {
     if (!tca.begin(TCA8418_DEFAULT_ADDR, &Wire)) {
-        Serial.println("Erro ao encontrar o controlador TCA8418!");
+        ComandoDisplay cmdLed;
+        cmdLed.tipo = DISPLAY_TEXTO;
+        strncpy(cmdLed.textoLinha1, "ERRO NO TECLADO!", sizeof(cmdLed.textoLinha1));
+        xQueueSend(filaDisplay, &cmdLed, 0);
         vTaskDelete(NULL);
         return;
     }
@@ -91,6 +94,31 @@ void initKeypad(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
+// Função auxiliar estática para atualizar o LCD via fila durante a edição do nome
+static void atualizarDisplayNome(const char* nome, int posCursor, bool comCursor) {
+    ComandoDisplay cmd;
+    cmd.tipo = DISPLAY_TEXTO;
+    
+    // Linha 1 fixa
+    strncpy(cmd.textoLinha1, "DIGITE SEU NOME:", sizeof(cmd.textoLinha1));
+    
+    // Monta a Linha 2 com o nome e o cursor '_'
+    char linha2[17] = "";
+    strncpy(linha2, nome, sizeof(linha2) - 1);
+    
+    // Adiciona o caractere de underline se estiver aguardando confirmação do caractere/timeout
+    if (comCursor && strlen(linha2) < 16) {
+        int len = strlen(linha2);
+        linha2[len] = '_';
+        linha2[len + 1] = '\0';
+    }
+    
+    strncpy(cmd.textoLinha2, linha2, sizeof(cmd.textoLinha2));
+    
+    // Envia para a fila do display (com timeout 0 para não travar a digitação)
+    xQueueSend(filaDisplay, &cmd, 0);
+}
+
 void lerNomeTecladoTCA8418() {
     char nomeTemp[11] = "";
     int posCursor = 0;
@@ -100,11 +128,8 @@ void lerNomeTecladoTCA8418() {
     unsigned long ultimoTempoPressionado = 0;
     bool aguardandoTimeout = false;
 
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("DIGITE SEU NOME:");
-    lcd.setCursor(0, 1);
-    lcd.print("_");
+    // Tela inicial de digitação
+    atualizarDisplayNome(nomeTemp, posCursor, true);
 
     tca.flush();
 
@@ -125,11 +150,11 @@ void lerNomeTecladoTCA8418() {
             posCursor++;
             if (posCursor > 9) posCursor = 9;
             
-            lcd.setCursor(posCursor, 1);
-            lcd.print("_");
-
             aguardandoTimeout = false;
             ultimaTecla = '\0';
+            
+            // Atualiza o display indicando que o caractere foi fixado e mostra o cursor no próximo slot
+            atualizarDisplayNome(nomeTemp, posCursor, true);
         }
 
         // 2. PROCESSAMENTO DAS TECLAS
@@ -152,15 +177,12 @@ void lerNomeTecladoTCA8418() {
                 if (aguardandoTimeout) {
                     aguardandoTimeout = false;
                     nomeTemp[posCursor] = '\0';
-                    lcd.setCursor(posCursor, 1);
-                    lcd.print("_ ");
                 } else if (posCursor > 0) {
                     posCursor--;
                     nomeTemp[posCursor] = '\0';
-                    lcd.setCursor(posCursor, 1);
-                    lcd.print("_ ");
                 }
                 ultimaTecla = '\0';
+                atualizarDisplayNome(nomeTemp, posCursor, true);
             }
             else { // TECLAS NUMÉRICAS (0-9)
                 const char* opcoes = getCaracteresDaTecla(tecla);
@@ -181,12 +203,12 @@ void lerNomeTecladoTCA8418() {
                     nomeTemp[posCursor] = letraAtual;
                     nomeTemp[posCursor + 1] = '\0';
 
-                    lcd.setCursor(posCursor, 1);
-                    lcd.print(letraAtual);
-
                     ultimaTecla = tecla;
                     ultimoTempoPressionado = agora;
                     aguardandoTimeout = true;
+
+                    // Atualiza o display com a nova letra digitada
+                    atualizarDisplayNome(nomeTemp, posCursor, false);
                 }
             }
         }
@@ -194,10 +216,11 @@ void lerNomeTecladoTCA8418() {
         vTaskDelay(pdMS_TO_TICKS(30)); // Cede tempo para o scheduler do FreeRTOS
     }
 
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("NOME GRAVADO:");
-    lcd.setCursor(0, 1);
-    lcd.print(nomeJogadorAtual);
-    vTaskDelay(pdMS_TO_TICKS(1500));
+    // Tela final confirmando o nome gravado
+    ComandoDisplay cmdFinal;
+    cmdFinal.tipo = DISPLAY_TEXTO;
+    strncpy(cmdFinal.textoLinha1, "NOME GRAVADO:", sizeof(cmdFinal.textoLinha1));
+    strncpy(cmdFinal.textoLinha2, nomeJogadorAtual, sizeof(cmdFinal.textoLinha2));
+    xQueueSend(filaDisplay, &cmdFinal, portMAX_DELAY);
 }
+

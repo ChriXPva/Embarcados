@@ -9,6 +9,11 @@
 #include <DFRobotDFPlayerMini.h>
 #include <Preferences.h>
 #include <Adafruit_TCA8418.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/queue.h>
+#include <freertos/event_groups.h>
+#include <freertos/timers.h>
 
 #define NUM_LEDS 10
 
@@ -34,9 +39,11 @@ constexpr int PINS_LEDS[4] = {18, 19, 21, 23};
 
 // Estados do Jogo
 enum EstadoJogo { INIT, MENU, LEADERBOARD, REGISTRAR_NOME, PREPARAR, JOGANDO, GAMEOVER };
-enum TipoMensagemDisplay {DISPLAY_INIT,DISPLAY_MENU,DISPLAY_PREPARAR,DISPLAY_JOGANDO,DISPLAY_LEADERBOARD,DISPLAY_GAMEOVER};
+enum TipoMensagemDisplay {DISPLAY_INIT,DISPLAY_MENU,DISPLAY_PREPARAR,DISPLAY_JOGANDO,DISPLAY_LEADERBOARD,DISPLAY_GAMEOVER, DISPLAY_TEXTO};
 struct ComandoDisplay {
     TipoMensagemDisplay tipo;
+    char textoLinha1[17]; 
+    char textoLinha2[17]; 
     int vidas;
     float pontuacao;
     int modoDificuldade;
@@ -59,13 +66,8 @@ struct ComandoLED {
     uint32_t cor;
 };
 
-struct ComandoAudio {
-    int trackId;
-    int volume;
-};
-
 enum AcaoAudio {
-    AUDIO_PLAY_FOLDER,
+    AUDIO_PLAY,
     AUDIO_PAUSE,
     AUDIO_START,
     AUDIO_STOP
@@ -73,7 +75,6 @@ enum AcaoAudio {
 
 struct ComandoAudio {
     AcaoAudio acao;
-    int pasta;
     int faixa;
 };
 
@@ -83,7 +84,7 @@ extern QueueHandle_t filaAudio;
 extern QueueHandle_t filaDisplay;
 extern TaskHandle_t taskHandleInitDisplay, taskHandleInitLEDs, taskHandleInitAudio, taskHandleInitKeypad, taskHandleGameLogic;
 extern EventGroupHandle_t xInitEventGroup;
-
+extern TimerHandle_t timerApagarLED[4];
 
 void lerNomeTecladoTCA8418();
 
