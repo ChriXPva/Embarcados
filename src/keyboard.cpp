@@ -2,6 +2,9 @@
 #include "display_ui.h"
 
 Adafruit_TCA8418 tca;
+Preferences preferences;
+
+char nomeJogadorAtual[11] = "JOGADOR";
 
 // Mapeamento Multi-tap
 struct MapTecla {
@@ -22,12 +25,27 @@ const MapTecla mapaMultitap[] = {
     {'0', " 0"}
 };
 
-// Converte os IDs de evento da matriz do TCA8418 (ROW 0..3 e COL 0..2)
+// Funções de Persistência NVS
+void salvarNomeNVS(const char* nome) {
+    Preferences preferences; // Instância local
+    preferences.begin("player_data", false);
+    preferences.putString("nome", nome);
+    preferences.end();
+}
+
+void carregarNomeNVS() {
+    Preferences preferences; // Instância local
+    preferences.begin("player_data", true);
+    String nomeSalvo = preferences.getString("nome", "JOGADOR");
+    strncpy(nomeJogadorAtual, nomeSalvo.c_str(), sizeof(nomeJogadorAtual) - 1);
+    nomeJogadorAtual[sizeof(nomeJogadorAtual) - 1] = '\0';
+    preferences.end();
+}
+
+// Converte os IDs de evento da matriz do TCA8418
 char traduzirEventoTCA(uint8_t keyEvent) {
-    // Extrai o pino da matriz (1 a 12)
     uint8_t key = keyEvent & 0x7F; 
 
-    // Mapeamento conforme a fiação das 4 linhas x 3 colunas no TCA8418
     switch (key) {
         case 1:  return '1';
         case 2:  return '2';
@@ -57,12 +75,19 @@ const char* getCaracteresDaTecla(char tecla) {
 void initKeypad(void *pvParameters) {
     if (!tca.begin(TCA8418_DEFAULT_ADDR, &Wire)) {
         Serial.println("Erro ao encontrar o controlador TCA8418!");
+        vTaskDelete(NULL);
         return;
     }
-    // Configura a matriz de 4 linhas por 3 colunas
+    
     tca.matrix(4, 3);
-    tca.flush(); // Limpa o buffer de eventos
-    xEventGroupSetBits(xInitEventGroup, BIT_INIT_KEYPAD);
+    tca.flush();
+    
+    // Carrega o nome armazenado anteriormente na inicialização
+    carregarNomeNVS();
+
+    if (xInitEventGroup != NULL) {
+        xEventGroupSetBits(xInitEventGroup, BIT_INIT_KEYPAD);
+    }
     vTaskDelete(NULL);
 }
 
@@ -81,17 +106,16 @@ void lerNomeTecladoTCA8418() {
     lcd.setCursor(0, 1);
     lcd.print("_");
 
-    tca.flush(); // Limpa eventos residuais antes de iniciar a digitação
+    tca.flush();
 
     while (true) {
         char tecla = '\0';
         unsigned long agora = millis();
 
-        // Leitura da FIFO de eventos do TCA8418
+        // Leitura da FIFO do TCA8418
         if (tca.available() > 0) {
             uint8_t event = tca.getEvent();
-            // Filtra apenas eventos de PRESSIONAR (bit 0x80 ligado)
-            if (event & 0x80) { 
+            if (event & 0x80) { // Bit 0x80 = Pressionado
                 tecla = traduzirEventoTCA(event);
             }
         }
@@ -108,10 +132,10 @@ void lerNomeTecladoTCA8418() {
             ultimaTecla = '\0';
         }
 
-        // 2. PROCESSA A TECLA CAPTURADA
+        // 2. PROCESSAMENTO DAS TECLAS
         if (tecla != '\0') {
             
-            if (tecla == '#') { // CONFIRMAR (#)
+            if (tecla == '#') { // CONFIRMAR
                 if (posCursor == 0 && !aguardandoTimeout) {
                     strcpy(nomeJogadorAtual, "JOGADOR");
                 } else {
@@ -119,9 +143,12 @@ void lerNomeTecladoTCA8418() {
                     strncpy(nomeJogadorAtual, nomeTemp, 10);
                     nomeJogadorAtual[10] = '\0';
                 }
+
+                // Salva o nome confirmado na memória NVS da ESP
+                salvarNomeNVS(nomeJogadorAtual);
                 break;
             }
-            else if (tecla == '*') { // BACKSPACE (*)
+            else if (tecla == '*') { // BACKSPACE
                 if (aguardandoTimeout) {
                     aguardandoTimeout = false;
                     nomeTemp[posCursor] = '\0';
@@ -135,7 +162,7 @@ void lerNomeTecladoTCA8418() {
                 }
                 ultimaTecla = '\0';
             }
-            else { // TECLAS DE 0 A 9
+            else { // TECLAS NUMÉRICAS (0-9)
                 const char* opcoes = getCaracteresDaTecla(tecla);
                 if (opcoes != NULL) {
                     int numOpcoes = strlen(opcoes);
@@ -164,12 +191,12 @@ void lerNomeTecladoTCA8418() {
             }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(30)); // Cede tempo ao FreeRTOS
+        vTaskDelay(pdMS_TO_TICKS(30)); // Cede tempo para o scheduler do FreeRTOS
     }
 
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("NOME REGISTRADO:");
+    lcd.print("NOME GRAVADO:");
     lcd.setCursor(0, 1);
     lcd.print(nomeJogadorAtual);
     vTaskDelay(pdMS_TO_TICKS(1500));
