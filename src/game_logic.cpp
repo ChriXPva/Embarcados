@@ -161,7 +161,7 @@ void TaskJogoLogic(void *pvParameters) {
                 break;
 
             case REGISTRAR_NOME:
-                lerNomeTecladoTCA8418(); // Preenche o nome
+                lerNomeTecladoMatricial(); // Preenche o nome
                 estadoAtual = PREPARAR;
                 break;
 

@@ -14,6 +14,7 @@
 #include <freertos/queue.h>
 #include <freertos/event_groups.h>
 #include <freertos/timers.h>
+#include <Keypad.h>
 
 #define NUM_LEDS 10
 
@@ -86,6 +87,6 @@ extern TaskHandle_t taskHandleInitDisplay, taskHandleInitLEDs, taskHandleInitAud
 extern EventGroupHandle_t xInitEventGroup;
 extern TimerHandle_t timerApagarLED[4];
 
-void lerNomeTecladoTCA8418();
+void lerNomeTecladoMatricial();
 
 #endif

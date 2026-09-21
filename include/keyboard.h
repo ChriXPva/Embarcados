@@ -4,7 +4,7 @@
 #include "config.h"
 
 void initKeypad(void *pvParameters);
-void lerNomeTecladoTCA8418();
+void lerNomeTecladoMatricial();
 char traduzirEventoTCA(uint8_t keyEvent);
 
 #endif

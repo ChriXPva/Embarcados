@@ -1,12 +1,28 @@
 #include "keyboard.h"
 #include "display_ui.h"
 
-static Adafruit_TCA8418 tca;
 static Preferences preferences;
 
 char nomeJogadorAtual[11] = "JOGADOR";
 
 // Mapeamento Multi-tap
+
+
+const byte LINHAS = 4;
+const byte COLUNAS = 3;
+
+char teclas[LINHAS][COLUNAS] = {
+    {'1', '2', '3'},
+    {'4', '5', '6'},
+    {'7', '8', '9'},
+    {'*', '0', '#'}
+};
+
+byte pinosLinhas[LINHAS]   = {19, 18, 5, 17}; 
+byte pinosColunas[COLUNAS] = {16, 4, 2};
+
+static Keypad keypad = Keypad(makeKeymap(teclas), pinosLinhas, pinosColunas, LINHAS, COLUNAS);
+
 struct MapTecla {
     char tecla;
     const char* caracteres;
@@ -42,27 +58,6 @@ void carregarNomeNVS() {
     preferences.end();
 }
 
-// Converte os IDs de evento da matriz do TCA8418
-char traduzirEventoTCA(uint8_t keyEvent) {
-    uint8_t key = keyEvent & 0x7F; 
-
-    switch (key) {
-        case 1:  return '1';
-        case 2:  return '2';
-        case 3:  return '3';
-        case 11: return '4';
-        case 12: return '5';
-        case 13: return '6';
-        case 21: return '7';
-        case 22: return '8';
-        case 23: return '9';
-        case 31: return '*';
-        case 32: return '0';
-        case 33: return '#';
-        default: return '\0';
-    }
-}
-
 const char* getCaracteresDaTecla(char tecla) {
     for (int i = 0; i < 10; i++) {
         if (mapaMultitap[i].tecla == tecla) {
@@ -73,24 +68,20 @@ const char* getCaracteresDaTecla(char tecla) {
 }
 
 void initKeypad(void *pvParameters) {
-    if (!tca.begin(TCA8418_DEFAULT_ADDR, &Wire)) {
-        ComandoDisplay cmdLed;
-        cmdLed.tipo = DISPLAY_TEXTO;
-        strncpy(cmdLed.textoLinha1, "ERRO NO TECLADO!", sizeof(cmdLed.textoLinha1));
-        xQueueSend(filaDisplay, &cmdLed, 0);
-        vTaskDelete(NULL);
-        return;
-    }
-    
-    tca.matrix(4, 3);
-    tca.flush();
-    
+    ComandoDisplay cmdLed;
+    cmdLed.tipo = DISPLAY_TEXTO;
+    strncpy(cmdLed.textoLinha1, "ERRO NO TECLADO!", sizeof(cmdLed.textoLinha1));
+    xQueueSend(filaDisplay, &cmdLed, 0);
+    vTaskDelete(NULL);
+    keypad.setDebounceTime(20);
+
     // Carrega o nome armazenado anteriormente na inicialização
     carregarNomeNVS();
 
     if (xInitEventGroup != NULL) {
         xEventGroupSetBits(xInitEventGroup, BIT_INIT_KEYPAD);
     }
+    
     vTaskDelete(NULL);
 }
 
@@ -119,7 +110,7 @@ static void atualizarDisplayNome(const char* nome, int posCursor, bool comCursor
     xQueueSend(filaDisplay, &cmd, 0);
 }
 
-void lerNomeTecladoTCA8418() {
+void lerNomeTecladoMatricial() {
     char nomeTemp[11] = "";
     int posCursor = 0;
     
@@ -131,19 +122,10 @@ void lerNomeTecladoTCA8418() {
     // Tela inicial de digitação
     atualizarDisplayNome(nomeTemp, posCursor, true);
 
-    tca.flush();
-
     while (true) {
-        char tecla = '\0';
+        // Leitura direta do teclado de membrana via biblioteca Keypad
+        char tecla = keypad.getKey();
         unsigned long agora = millis();
-
-        // Leitura da FIFO do TCA8418
-        if (tca.available() > 0) {
-            uint8_t event = tca.getEvent();
-            if (event & 0x80) { // Bit 0x80 = Pressionado
-                tecla = traduzirEventoTCA(event);
-            }
-        }
 
         // 1. TIMEOUT DO MULTI-TAP (800ms)
         if (aguardandoTimeout && (agora - ultimoTempoPressionado > 800)) {
@@ -153,12 +135,11 @@ void lerNomeTecladoTCA8418() {
             aguardandoTimeout = false;
             ultimaTecla = '\0';
             
-            // Atualiza o display indicando que o caractere foi fixado e mostra o cursor no próximo slot
             atualizarDisplayNome(nomeTemp, posCursor, true);
         }
 
         // 2. PROCESSAMENTO DAS TECLAS
-        if (tecla != '\0') {
+        if (tecla != NO_KEY) {
             
             if (tecla == '#') { // CONFIRMAR
                 if (posCursor == 0 && !aguardandoTimeout) {
@@ -169,9 +150,8 @@ void lerNomeTecladoTCA8418() {
                     nomeJogadorAtual[10] = '\0';
                 }
 
-                // Salva o nome confirmado na memória NVS da ESP
                 salvarNomeNVS(nomeJogadorAtual);
-                break;
+                break; // Sai do loop de leitura de nome
             }
             else if (tecla == '*') { // BACKSPACE
                 if (aguardandoTimeout) {
@@ -207,13 +187,12 @@ void lerNomeTecladoTCA8418() {
                     ultimoTempoPressionado = agora;
                     aguardandoTimeout = true;
 
-                    // Atualiza o display com a nova letra digitada
                     atualizarDisplayNome(nomeTemp, posCursor, false);
                 }
             }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(30)); // Cede tempo para o scheduler do FreeRTOS
+        vTaskDelay(pdMS_TO_TICKS(20)); // Cede o controle ao FreeRTOS e evita estouro de Watchdog
     }
 
     // Tela final confirmando o nome gravado
@@ -223,4 +202,3 @@ void lerNomeTecladoTCA8418() {
     strncpy(cmdFinal.textoLinha2, nomeJogadorAtual, sizeof(cmdFinal.textoLinha2));
     xQueueSend(filaDisplay, &cmdFinal, portMAX_DELAY);
 }
-
