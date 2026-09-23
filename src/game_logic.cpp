@@ -128,7 +128,7 @@ void TaskJogoLogic(void *pvParameters) {
         switch (estadoAtual) {
             case INIT: {
                 // Aguarda todos os subsistemas sinalizarem inicialização
-                EventBits_t bits = xEventGroupWaitBits(xInitEventGroup, ALL_INIT_BITS, pdFALSE, pdTRUE, portMAX_DELAY);
+                EventBits_t bits = xEventGroupWaitBits(xInitEventGroup, ALL_INIT_BITS, pdFALSE, pdTRUE, pdMS_TO_TICKS(5000));
                 const EventBits_t bitsEsperados = ALL_INIT_BITS; // Ajuste conforme os módulos que você deseja verificar
                 if ((bits & bitsEsperados) == bitsEsperados) {
                     estadoAtual = MENU;
