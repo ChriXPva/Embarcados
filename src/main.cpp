@@ -28,7 +28,7 @@ void setup() {
     // xTaskCreatePinnedToCore(initLeds,"LEDs",  2048, NULL, 1, &taskHandleInitLEDs, 1);
     xTaskCreatePinnedToCore(initAudio,"Audio",  2048, NULL, 1, &taskHandleInitAudio, 1);
     // xTaskCreatePinnedToCore(initKeypad,"Keypad",  2048, NULL, 1, &taskHandleInitKeypad, 0);
-    xTaskCreatePinnedToCore(initGameHardware,"Game",  2048, NULL, 1, &taskHandleGameLogic, 0);
+    xTaskCreatePinnedToCore(TaskJogoLogic,"Game",  2048, NULL, 1, &taskHandleGameLogic, 0);
 }
 
 void loop() {
