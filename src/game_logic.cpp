@@ -6,7 +6,7 @@ static const unsigned long TEMPO_DEBOUNCE_MS = 150;
 
 // Constante para definir a cor (Azul RGB) sem depender do objeto Adafruit_NeoPixel
 static const uint32_t COR_AZUL = 0x0000FF;
-
+/*
 // Helper para envio limpo de comandos para a fila de áudio
 static void enviarComandoAudio(AcaoAudio acao, int faixa = 0) {
     if (filaAudio != NULL) {
@@ -15,7 +15,7 @@ static void enviarComandoAudio(AcaoAudio acao, int faixa = 0) {
     }
 }
 
-/*
+
 static void carregarLeaderboard(Jogador* leaderboard) {
     prefs.begin("leaderboard", true); // Modo leitura
     for (int i = 0; i < 5; i++) {
@@ -136,8 +136,8 @@ void TaskJogoLogic(void *pvParameters) {
                     Serial.println("\n[ERRO CRÍTICO] Falha na inicialização do sistema!");
                     Serial.println("Módulos que não responderam:");
                     // if (!(bits & BIT_INIT_DISPLAY)) {Serial.println(" - Display LCD");}
-                    // if (!(bits & BIT_INIT_LEDS)) {Serial.println(" - LEDs NeoPixel");}
-                    if (!(bits & BIT_INIT_AUDIO)) {Serial.println(" - Áudio (DFPlayer Mini)");}
+                    if (!(bits & BIT_INIT_LEDS)) {Serial.println(" - LEDs NeoPixel");}
+                    //if (!(bits & BIT_INIT_AUDIO)) {Serial.println(" - Áudio (DFPlayer Mini)");}
                     // if (!(bits & BIT_INIT_KEYPAD)) {Serial.println(" - Teclado (TCA8418)");}
                     // if (!(bits & BIT_INIT_GAME)) {Serial.println(" - Hardware do Jogo / Filas");}
                     while (true) {

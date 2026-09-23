@@ -1,5 +1,3 @@
-/*
-
 #include "leds.h"
 
 TimerHandle_t timerApagarLED[4];
@@ -10,7 +8,7 @@ static Adafruit_NeoPixel strip[4] = {
     Adafruit_NeoPixel(NUM_LEDS, PINS_LEDS[2], NEO_GRB + NEO_KHZ800),
     Adafruit_NeoPixel(NUM_LEDS, PINS_LEDS[3], NEO_GRB + NEO_KHZ800)
 };
-
+/*
 void callbackApagarLED(TimerHandle_t xTimer) {
     int indicePad = (int) pvTimerGetTimerID(xTimer);
     strip[indicePad].clear();
@@ -28,7 +26,7 @@ void initTimersLED(void) {
         );
     }
 }
-
+*/
 static uint32_t getRandomColor() {
     return strip[0].Color(random(0, 256), random(0, 256), random(0, 256));
 }
@@ -81,6 +79,8 @@ void initLeds(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
+/*
+
 void TaskEfeitosLED(void *pvParameters) {
     ComandoLED comando;
 
@@ -110,4 +110,5 @@ void TaskEfeitosLED(void *pvParameters) {
         }
     }
 }
+
 */

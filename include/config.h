@@ -36,11 +36,11 @@ constexpr int PINS_LEDS[4] = {18, 19, 21, 23};
 // #define BIT_INIT_KEYPAD (1 << 3)
 // #define BIT_INIT_GAME (1 << 4)
 
-#define BIT_INIT_AUDIO (1 << 0)
+#define BIT_INIT_LEDS (1 << 0)
 
 //#define ALL_INIT_BITS (BIT_INIT_DISPLAY | BIT_INIT_LEDS | BIT_INIT_AUDIO | BIT_INIT_KEYPAD | BIT_INIT_GAME)
 
-#define ALL_INIT_BITS (BIT_INIT_AUDIO)
+#define ALL_INIT_BITS (BIT_INIT_LEDS)
 
 // Estados do Jogo
 enum EstadoJogo { INIT, MENU, LEADERBOARD, REGISTRAR_NOME, PREPARAR, JOGANDO, GAMEOVER };
