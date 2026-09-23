@@ -1,3 +1,5 @@
+/*
+
 #include "keyboard.h"
 #include "display_ui.h"
 
@@ -202,3 +204,5 @@ void lerNomeTecladoMatricial() {
     strncpy(cmdFinal.textoLinha2, nomeJogadorAtual, sizeof(cmdFinal.textoLinha2));
     xQueueSend(filaDisplay, &cmdFinal, portMAX_DELAY);
 }
+
+*/

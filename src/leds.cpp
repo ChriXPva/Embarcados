@@ -1,3 +1,5 @@
+/*
+
 #include "leds.h"
 
 TimerHandle_t timerApagarLED[4];
@@ -108,3 +110,4 @@ void TaskEfeitosLED(void *pvParameters) {
         }
     }
 }
+*/
