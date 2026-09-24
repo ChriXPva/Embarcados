@@ -24,8 +24,8 @@ const int BOTAO_START       = 10;
 const int BOTAO_LEADERBOARD = 11;
 const int BOTAO_SAIR        = 12;
 
-constexpr int PINS_PADS[4] = {13, 14, 27, 33};
-constexpr int PINS_LEDS[4] = {18, 19, 21, 23};
+//constexpr int PINS_PADS[4] = {13, 14, 27, 33};
+//constexpr int PINS_LEDS[4] = {18, 19, 21, 23};
 
 #define DFPLAYER_RX 16
 #define DFPLAYER_TX 17
@@ -60,11 +60,12 @@ struct Jogador {
     float pontuacao;
 };
 
+/*
 struct EventoToque {
     int indicePad;
     unsigned long instanteToque;
 };
-
+*/
 struct ComandoLED {
     int indicePad;
     int tipoEfeito; 
@@ -83,7 +84,7 @@ struct ComandoAudio {
     int faixa;
 };
 
-extern QueueHandle_t filaToques;
+// extern QueueHandle_t filaToques;
 extern QueueHandle_t filaLEDs;
 extern QueueHandle_t filaAudio;
 extern QueueHandle_t filaDisplay;
