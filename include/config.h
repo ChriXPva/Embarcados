@@ -8,7 +8,6 @@
 #include <HardwareSerial.h>
 #include <DFRobotDFPlayerMini.h>
 #include <Preferences.h>
-#include <Adafruit_TCA8418.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/queue.h>
@@ -17,15 +16,6 @@
 #include <Keypad.h>
 
 #define NUM_LEDS 10
-
-// Pinos dos Botões de Controle
-const int BOTAO_DIFICULDADE = 5;
-const int BOTAO_START       = 10;
-const int BOTAO_LEADERBOARD = 11;
-const int BOTAO_SAIR        = 12;
-
-constexpr int PINS_PADS[4] = {13, 14, 27, 33};
-constexpr int PINS_LEDS[4] = {18, 19, 21, 23};
 
 #define DFPLAYER_RX 16
 #define DFPLAYER_TX 17
@@ -36,11 +26,11 @@ constexpr int PINS_LEDS[4] = {18, 19, 21, 23};
 // #define BIT_INIT_KEYPAD (1 << 3)
 // #define BIT_INIT_GAME (1 << 4)
 
-#define BIT_INIT_AUDIO (1 << 0)
+#define BIT_INIT_GAME (1 << 0)
 
 //#define ALL_INIT_BITS (BIT_INIT_DISPLAY | BIT_INIT_LEDS | BIT_INIT_AUDIO | BIT_INIT_KEYPAD | BIT_INIT_GAME)
 
-#define ALL_INIT_BITS (BIT_INIT_AUDIO)
+#define ALL_INIT_BITS (BIT_INIT_GAME)
 
 // Estados do Jogo
 enum EstadoJogo { INIT, MENU, LEADERBOARD, REGISTRAR_NOME, PREPARAR, JOGANDO, GAMEOVER };
@@ -87,7 +77,7 @@ extern QueueHandle_t filaToques;
 extern QueueHandle_t filaLEDs;
 extern QueueHandle_t filaAudio;
 extern QueueHandle_t filaDisplay;
-extern TaskHandle_t taskHandleInitDisplay, taskHandleInitLEDs, taskHandleInitAudio, taskHandleInitKeypad, taskHandleGameLogic;
+extern TaskHandle_t taskHandleInitDisplay, taskHandleInitLEDs, taskHandleInitAudio, taskHandleInitKeypad, taskHandleGameLogic, taskHandleGameHardware;
 extern EventGroupHandle_t xInitEventGroup;
 extern TimerHandle_t timerApagarLED[4];
 

@@ -1,6 +1,10 @@
 #include "game_logic.h"
 
 static Preferences prefs;
+
+constexpr int PINS_PADS[4] = {38, 39, 40, 41};
+constexpr int PINS_LEDS[4] = {19, 20, 3, 46};
+
 static volatile unsigned long ultimoTempoInterrupcao[4] = {0, 0, 0, 0};
 static const unsigned long TEMPO_DEBOUNCE_MS = 150;
 
@@ -59,7 +63,7 @@ static void atualizarRanking(Jogador* leaderboard, const char* nome, float ponto
         }
     }
 }
-
+*/
 
 void IRAM_ATTR ISR_Pad(void* arg) {
     int indicePad = (int)(intptr_t)arg;
@@ -83,13 +87,10 @@ void IRAM_ATTR ISR_Pad(void* arg) {
 
 
 void initGameHardware(void *pvParameters) {
-    pinMode(BOTAO_DIFICULDADE, INPUT_PULLUP);
-    pinMode(BOTAO_START, INPUT_PULLUP);
-    pinMode(BOTAO_LEADERBOARD, INPUT_PULLUP);
-    pinMode(BOTAO_SAIR, INPUT_PULLUP);
-
     for (int i = 0; i < 4; i++) {
         pinMode(PINS_PADS[i], INPUT_PULLUP);
+        pinMode(PINS_LEDS[i], OUTPUT);
+        digitalWrite(PINS_LEDS[i], LOW);
         attachInterruptArg(digitalPinToInterrupt(PINS_PADS[i]), ISR_Pad, (void*)(intptr_t)i, FALLING);
     }
 
@@ -100,19 +101,18 @@ void initGameHardware(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
-*/
+
 
 void TaskJogoLogic(void *pvParameters) {
     // Variáveis de estado do jogo isoladas internamente na Task (Sem Race Conditions)
     EstadoJogo estadoAtual = INIT;
     int vidas = 3;
-    int indicePadAtual = -1;
-    unsigned long tempoDeAtivacao = 3000;
     unsigned long instanteAtivacaoPad = 0;
-    int modoDificuldade = 0;
     float pontuacaoTotal = 0.0;
     float somaTemposResposta = 0.0;
     int totalAcertos = 0;
+    const int TOTAL_RODADAS = 10;
+    const unsigned long TEMPO_LIMITE_MS = 3000;
 
     Jogador leaderboard[5];
     char nomeJogadorAtual[11] = "Player";
@@ -131,18 +131,15 @@ void TaskJogoLogic(void *pvParameters) {
                 EventBits_t bits = xEventGroupWaitBits(xInitEventGroup, ALL_INIT_BITS, pdFALSE, pdTRUE, pdMS_TO_TICKS(5000));
                 const EventBits_t bitsEsperados = ALL_INIT_BITS; // Ajuste conforme os módulos que você deseja verificar
                 if ((bits & bitsEsperados) == bitsEsperados) {
-                    estadoAtual = MENU;
+                    estadoAtual = JOGANDO;
                 } else {
                     Serial.println("\n[ERRO CRÍTICO] Falha na inicialização do sistema!");
                     Serial.println("Módulos que não responderam:");
                     // if (!(bits & BIT_INIT_DISPLAY)) {Serial.println(" - Display LCD");}
                     // if (!(bits & BIT_INIT_LEDS)) {Serial.println(" - LEDs NeoPixel");}
-                    if (!(bits & BIT_INIT_AUDIO)) {Serial.println(" - Áudio (DFPlayer Mini)");}
+                    // if (!(bits & BIT_INIT_AUDIO)) {Serial.println(" - Áudio (DFPlayer Mini)");}
                     // if (!(bits & BIT_INIT_KEYPAD)) {Serial.println(" - Teclado (TCA8418)");}
-                    // if (!(bits & BIT_INIT_GAME)) {Serial.println(" - Hardware do Jogo / Filas");}
-                    while (true) {
-                        vTaskDelay(pdMS_TO_TICKS(1000));
-                    }
+                    if (!(bits & BIT_INIT_GAME)) {Serial.println(" - Hardware do Jogo / Filas");}
                 }
                 vTaskDelay(pdMS_TO_TICKS(500));
                 break;
@@ -198,85 +195,61 @@ void TaskJogoLogic(void *pvParameters) {
                 instanteAtivacaoPad = millis();
                 estadoAtual = JOGANDO;
                 break;
+            */
+            case JOGANDO:{
+                for (int rodada = 1; rodada <= TOTAL_RODADAS; rodada++) {
+                    Serial.printf("\n--- RODADA %d DE %d ---\n", rodada, TOTAL_RODADAS);
 
-            case JOGANDO:
-                if (digitalRead(BOTAO_SAIR) == LOW) {
-                    estadoAtual = GAMEOVER;
-                    enviarComandoAudio(AUDIO_STOP);
-                    cmdLed = {indicePadAtual, 0, 0};
-                    xQueueSend(filaLEDs, &cmdLed, 0);
-                    vTaskDelay(pdMS_TO_TICKS(300));
-                    break;
-                }
-
-                // Aguarda evento de toque com o timeout igual ao tempo limite de reação
-                if (xQueueReceive(filaToques, &evento, pdMS_TO_TICKS(tempoDeAtivacao)) == pdTRUE) {
-                    if (evento.indicePad == indicePadAtual) {
-                        float tempoReacao = (float)(evento.instanteToque - instanteAtivacaoPad);
-                        somaTemposResposta += tempoReacao;
-                        totalAcertos++;
-                        
-                        float pontoDaVez = 1000.0 - (0.5 * tempoReacao);
-                        if (pontoDaVez < 0) pontoDaVez = 0;
-                        pontuacaoTotal += pontoDaVez;
-
-                        // Apaga o pad atingido
-                        cmdLed = {indicePadAtual, 0, 0};
-                        xQueueSend(filaLEDs, &cmdLed, 0);
-
-                        vTaskDelay(pdMS_TO_TICKS(1000)); // Intervalo
-
-                        // Seleciona o novo pad aleatório
-                        indicePadAtual = random(0, 4);
-                        cmdLed = {indicePadAtual, modoDificuldade == 0 ? 2 : 1, COR_AZUL};
-                        xQueueSend(filaLEDs, &cmdLed, 0);
-                        
-                        instanteAtivacaoPad = millis();
-                    } else {
-                        goto TratarErro;
+                    // Limpa eventos antigos da fila antes de iniciar a jogada
+                    if (filaToques != NULL) {
+                        xQueueReset(filaToques);
                     }
-                } else {
-                    // Timeout (jogador não respondeu a tempo)
-                    goto TratarErro;
-                }
-                break;
 
-            TratarErro:
-                vidas--;
-                cmdLed = {indicePadAtual, 0, 0};
-                xQueueSend(filaLEDs, &cmdLed, 0);
+                    // Escolhe um Pad/LED aleatório (0 a 3)
+                    int indicePadAtual = random(0, 4);
 
-                enviarComandoAudio(AUDIO_PAUSE);
-                vTaskDelay(pdMS_TO_TICKS(100)); 
+                    // Acende o LED correspondente
+                    digitalWrite(PINS_LEDS[indicePadAtual], HIGH);
+                    unsigned long instanteAtivacaoPad = millis();
 
-                enviarComandoAudio(AUDIO_PLAY, 2); // Som de erro/falha
-                vTaskDelay(pdMS_TO_TICKS(5000));
+                    // Aguarda a resposta do usuário via fila do FreeRTOS até o limite de 3 segundos
+                    if (xQueueReceive(filaToques, &evento, pdMS_TO_TICKS(TEMPO_LIMITE_MS)) == pdTRUE) {
+                        // Verifica se o usuário pressionou o Pad correto
+                        if (evento.indicePad == indicePadAtual) {
+                            float tempoReacao = (float)(evento.instanteToque - instanteAtivacaoPad);
+                            
+                            // Cálculo de pontuação
+                            float pontoDaVez = 1000.0 - (0.5 * tempoReacao);
+                            if (pontoDaVez < 0) pontoDaVez = 0;
 
-                if (vidas <= 0) {
-                    atualizarRanking(leaderboard, nomeJogadorAtual, pontuacaoTotal);
-                    estadoAtual = GAMEOVER;
-                } else {
-                    if (filaToques != NULL) xQueueReset(filaToques);
-                    enviarComandoAudio(AUDIO_START);
-                    
+                            pontuacaoTotal += pontoDaVez;
+                            totalAcertos++;
+
+                            Serial.printf("Acertou! Tempo de reação: %.2f ms | Pontos ganhos: %.2f\n", tempoReacao, pontoDaVez);
+                        } else {
+                            Serial.println("Errou! Pressionou o pad incorreto.");
+                        }
+                    } else {
+                        Serial.println("Tempo esgotado! Não respondeu a tempo.");
+                    }
+
+                    // Apaga o LED ativo
+                    digitalWrite(PINS_LEDS[indicePadAtual], LOW);
+
+                    // Intervalo entre rodadas
                     vTaskDelay(pdMS_TO_TICKS(1000));
-
-                    indicePadAtual = random(0, 4);
-                    cmdLed = {indicePadAtual, modoDificuldade == 0 ? 2 : 1, COR_AZUL};
-                    xQueueSend(filaLEDs, &cmdLed, 0);
-                    instanteAtivacaoPad = millis();
                 }
-                break;
 
-            case GAMEOVER:
-                enviarComandoAudio(AUDIO_STOP);
-                if (digitalRead(BOTAO_START) == LOW) {
-                    estadoAtual = MENU;
-                    vTaskDelay(pdMS_TO_TICKS(300));
-                }
-                vTaskDelay(pdMS_TO_TICKS(50));
-                break;
-                */
+                // Exibe o resultado final após as 10 rodadas
+                Serial.println("\n==================================");
+                Serial.println("          FIM DE JOGO!            ");
+                Serial.printf("Total de Acertos: %d/%d\n", totalAcertos, TOTAL_RODADAS);
+                Serial.printf("Pontuação Total Acumulada: %.2f\n", pontuacaoTotal);
+                Serial.println("==================================");
+
+                // Finaliza a Task
+                vTaskDelete(NULL);
+            } 
         }
     }
 }
