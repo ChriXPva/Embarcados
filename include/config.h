@@ -27,21 +27,18 @@
 // #define BIT_INIT_GAME (1 << 4)
 
 #define BIT_INIT_GAME (1 << 0)
+#define BIT_INIT_DISPLAY (1 << 1)
 
 //#define ALL_INIT_BITS (BIT_INIT_DISPLAY | BIT_INIT_LEDS | BIT_INIT_AUDIO | BIT_INIT_KEYPAD | BIT_INIT_GAME)
 
-#define ALL_INIT_BITS (BIT_INIT_GAME)
+#define ALL_INIT_BITS (BIT_INIT_GAME | BIT_INIT_DISPLAY)
 
 // Estados do Jogo
 enum EstadoJogo { INIT, MENU, LEADERBOARD, REGISTRAR_NOME, PREPARAR, JOGANDO, GAMEOVER };
-enum TipoMensagemDisplay {DISPLAY_INIT,DISPLAY_MENU,DISPLAY_PREPARAR,DISPLAY_JOGANDO,DISPLAY_LEADERBOARD,DISPLAY_GAMEOVER, DISPLAY_TEXTO};
 struct ComandoDisplay {
-    TipoMensagemDisplay tipo;
     char textoLinha1[17]; 
     char textoLinha2[17]; 
-    int vidas;
     float pontuacao;
-    int modoDificuldade;
     char nomeJogador[11];
     int posicaoRanking; // Para o Leaderboard (0 a 4)
 };
@@ -77,7 +74,8 @@ extern QueueHandle_t filaToques;
 extern QueueHandle_t filaLEDs;
 extern QueueHandle_t filaAudio;
 extern QueueHandle_t filaDisplay;
-extern TaskHandle_t taskHandleInitDisplay, taskHandleInitLEDs, taskHandleInitAudio, taskHandleInitKeypad, taskHandleGameLogic, taskHandleGameHardware;
+extern TaskHandle_t taskHandleInitDisplay, taskHandleInitLEDs, taskHandleInitAudio, taskHandleInitKeypad, taskHandleGameLogic, taskHandleGameHardware,
+taskHandleEscreverDisplay;
 extern EventGroupHandle_t xInitEventGroup;
 extern TimerHandle_t timerApagarLED[4];
 

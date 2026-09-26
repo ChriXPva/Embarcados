@@ -19,6 +19,18 @@ static void enviarComandoAudio(AcaoAudio acao, int faixa = 0) {
     }
 }
 
+static void atualizarDisplay(const char* linha1, const char* linha2) {
+    if (filaDisplay != NULL) {
+        ComandoDisplay cmdDisplay;
+        memset(&cmdDisplay, 0, sizeof(ComandoDisplay));
+        
+        strncpy(cmdDisplay.textoLinha1, linha1, sizeof(cmdDisplay.textoLinha1) - 1);
+        strncpy(cmdDisplay.textoLinha2, linha2, sizeof(cmdDisplay.textoLinha2) - 1);
+        
+        xQueueSend(filaDisplay, &cmdDisplay, pdMS_TO_TICKS(1000));
+    }
+}
+
 /*
 static void carregarLeaderboard(Jogador* leaderboard) {
     prefs.begin("leaderboard", true); // Modo leitura
@@ -119,7 +131,9 @@ void TaskJogoLogic(void *pvParameters) {
 
     EventoToque evento;
     ComandoLED cmdLed;
-    ComandoDisplay cmdDisplay;
+
+    char bufferL1[17];
+    char bufferL2[17];
 
     // Carrega o ranking persistente na memória da task local
     // carregarLeaderboard(leaderboard);
@@ -131,19 +145,27 @@ void TaskJogoLogic(void *pvParameters) {
                 EventBits_t bits = xEventGroupWaitBits(xInitEventGroup, ALL_INIT_BITS, pdFALSE, pdTRUE, pdMS_TO_TICKS(5000));
                 const EventBits_t bitsEsperados = ALL_INIT_BITS; // Ajuste conforme os módulos que você deseja verificar
                 if ((bits & bitsEsperados) == bitsEsperados) {
+                    atualizarDisplay("SISTEMA PRONTO!", "INICIANDO JOGO");
+                    vTaskDelay(pdMS_TO_TICKS(1500));
                     estadoAtual = JOGANDO;
                 } else {
-                    Serial.println("\n[ERRO CRÍTICO] Falha na inicialização do sistema!");
-                    Serial.println("Módulos que não responderam:");
-                    // if (!(bits & BIT_INIT_DISPLAY)) {Serial.println(" - Display LCD");}
-                    // if (!(bits & BIT_INIT_LEDS)) {Serial.println(" - LEDs NeoPixel");}
-                    // if (!(bits & BIT_INIT_AUDIO)) {Serial.println(" - Áudio (DFPlayer Mini)");}
-                    // if (!(bits & BIT_INIT_KEYPAD)) {Serial.println(" - Teclado (TCA8418)");}
-                    if (!(bits & BIT_INIT_GAME)) {Serial.println(" - Hardware do Jogo / Filas");}
+                    atualizarDisplay("Falha na inicializacao do sistema!", "");
+                    atualizarDisplay("Modulos que não responderam:", "");
+                    if (!(bits & BIT_INIT_DISPLAY)) {atualizarDisplay("- Display LCD", "");};
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    /* if (!(bits & BIT_INIT_LEDS)) {atualizarDisplay("- LEDS NeoPixel", "");};
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    if (!(bits & BIT_INIT_AUDIO)) {{atualizarDisplay("- DFPlayer", "");};
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    if (!(bits & BIT_INIT_KEYPAD)) {{atualizarDisplay("- Teclado", "");};
+                    */
+                    if (!(bits & BIT_INIT_GAME)) {{atualizarDisplay("- HARDWARE DO JOGO", "");};
+                    vTaskDelay(pdMS_TO_TICKS(1000));
                 }
                 vTaskDelay(pdMS_TO_TICKS(500));
                 break;
             }
+        }
             /*
             case MENU:
                 if (digitalRead(BOTAO_START) == LOW) {
@@ -198,7 +220,8 @@ void TaskJogoLogic(void *pvParameters) {
             */
             case JOGANDO:{
                 for (int rodada = 1; rodada <= TOTAL_RODADAS; rodada++) {
-                    Serial.printf("\n--- RODADA %d DE %d ---\n", rodada, TOTAL_RODADAS);
+                    snprintf(bufferL1, sizeof(bufferL1), "RODADA %d/%d", rodada, TOTAL_RODADAS);
+                    atualizarDisplay(bufferL1, "PREPARE-SE!");
 
                     // Limpa eventos antigos da fila antes de iniciar a jogada
                     if (filaToques != NULL) {
@@ -210,6 +233,7 @@ void TaskJogoLogic(void *pvParameters) {
 
                     // Acende o LED correspondente
                     digitalWrite(PINS_LEDS[indicePadAtual], HIGH);
+                    atualizarDisplay(bufferL1, "PRESSIONE O PAD!");
                     unsigned long instanteAtivacaoPad = millis();
 
                     // Aguarda a resposta do usuário via fila do FreeRTOS até o limite de 3 segundos
@@ -217,20 +241,19 @@ void TaskJogoLogic(void *pvParameters) {
                         // Verifica se o usuário pressionou o Pad correto
                         if (evento.indicePad == indicePadAtual) {
                             float tempoReacao = (float)(evento.instanteToque - instanteAtivacaoPad);
-                            
-                            // Cálculo de pontuação
                             float pontoDaVez = 1000.0 - (0.5 * tempoReacao);
                             if (pontoDaVez < 0) pontoDaVez = 0;
 
                             pontuacaoTotal += pontoDaVez;
                             totalAcertos++;
-
-                            Serial.printf("Acertou! Tempo de reação: %.2f ms | Pontos ganhos: %.2f\n", tempoReacao, pontoDaVez);
+                            
+                            snprintf(bufferL2, sizeof(bufferL2), "+%.0f Pts (%.0fms)", pontoDaVez, tempoReacao);
+                            atualizarDisplay("ACERTOU! :-)", bufferL2);
                         } else {
-                            Serial.println("Errou! Pressionou o pad incorreto.");
+                            atualizarDisplay("ERROU! :-S", "PAD INCORRETO!");
                         }
                     } else {
-                        Serial.println("Tempo esgotado! Não respondeu a tempo.");
+                        atualizarDisplay("TEMPO ESGOTADO!", "MUITO LENTO!");
                     }
 
                     // Apaga o LED ativo
@@ -240,12 +263,13 @@ void TaskJogoLogic(void *pvParameters) {
                     vTaskDelay(pdMS_TO_TICKS(1000));
                 }
 
-                // Exibe o resultado final após as 10 rodadas
-                Serial.println("\n==================================");
-                Serial.println("          FIM DE JOGO!            ");
-                Serial.printf("Total de Acertos: %d/%d\n", totalAcertos, TOTAL_RODADAS);
-                Serial.printf("Pontuação Total Acumulada: %.2f\n", pontuacaoTotal);
-                Serial.println("==================================");
+                snprintf(bufferL1, sizeof(bufferL1), "ACERTOS: %d/%d", totalAcertos, TOTAL_RODADAS);
+                snprintf(bufferL2, sizeof(bufferL2), "TOTAL: %.0f PTS", pontuacaoTotal);
+                atualizarDisplay(bufferL1, bufferL2);
+
+                vTaskDelay(pdMS_TO_TICKS(5000));
+                atualizarDisplay("FIM DE JOGO!", "");
+                vTaskDelay(pdMS_TO_TICKS(2000));
 
                 // Finaliza a Task
                 vTaskDelete(NULL);
