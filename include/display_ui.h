@@ -5,5 +5,6 @@
 
 void initDisplay(void *pvParameters);
 void TaskLCD_UI(void *pvParameters);
+void atualizarDisplay(const char* linha1, const char* linha2);
 
 #endif

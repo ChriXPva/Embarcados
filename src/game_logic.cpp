@@ -1,4 +1,6 @@
 #include "game_logic.h"
+#include "display_ui.h"
+#include "leaderboard.h"
 
 static Preferences prefs;
 
@@ -19,64 +21,6 @@ static void enviarComandoAudio(AcaoAudio acao, int faixa = 0) {
     }
 }
 
-static void atualizarDisplay(const char* linha1, const char* linha2) {
-    if (filaDisplay != NULL) {
-        ComandoDisplay cmdDisplay;
-        memset(&cmdDisplay, 0, sizeof(ComandoDisplay));
-        
-        strncpy(cmdDisplay.textoLinha1, linha1, sizeof(cmdDisplay.textoLinha1) - 1);
-        strncpy(cmdDisplay.textoLinha2, linha2, sizeof(cmdDisplay.textoLinha2) - 1);
-        
-        xQueueSend(filaDisplay, &cmdDisplay, pdMS_TO_TICKS(1000));
-    }
-}
-
-/*
-static void carregarLeaderboard(Jogador* leaderboard) {
-    prefs.begin("leaderboard", true); // Modo leitura
-    for (int i = 0; i < 5; i++) {
-        String chaveNome = "nome" + String(i);
-        String chavePontos = "pts" + String(i);
-
-        String nomeSalvo = prefs.getString(chaveNome.c_str(), "---");
-        strncpy(leaderboard[i].nome, nomeSalvo.c_str(), 10);
-        leaderboard[i].nome[10] = '\0';
-        
-        leaderboard[i].pontuacao = prefs.getFloat(chavePontos.c_str(), 0.0);
-    }
-    prefs.end();
-}
-
-
-static void salvarLeaderboard(const Jogador* leaderboard) {
-    prefs.begin("leaderboard", false); // Modo escrita
-    for (int i = 0; i < 5; i++) {
-        String chaveNome = "nome" + String(i);
-        String chavePontos = "pts" + String(i);
-
-        prefs.putString(chaveNome.c_str(), leaderboard[i].nome);
-        prefs.putFloat(chavePontos.c_str(), leaderboard[i].pontuacao);
-    }
-    prefs.end();
-}
-
-static void atualizarRanking(Jogador* leaderboard, const char* nome, float pontos) {
-    for (int i = 0; i < 5; i++) {
-        if (pontos > leaderboard[i].pontuacao) {
-            for (int j = 4; j > i; j--) {
-                leaderboard[j] = leaderboard[j - 1];
-            }
-            strncpy(leaderboard[i].nome, nome, 10);
-            leaderboard[i].nome[10] = '\0';
-            leaderboard[i].pontuacao = pontos;
-
-            salvarLeaderboard(leaderboard);
-            break;
-        }
-    }
-}
-*/
-
 void IRAM_ATTR ISR_Pad(void* arg) {
     int indicePad = (int)(intptr_t)arg;
     unsigned long agora = millis();
@@ -96,8 +40,6 @@ void IRAM_ATTR ISR_Pad(void* arg) {
     }
 }
 
-
-
 void initGameHardware(void *pvParameters) {
     for (int i = 0; i < 4; i++) {
         pinMode(PINS_PADS[i], INPUT_PULLUP);
@@ -113,8 +55,6 @@ void initGameHardware(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
-
-
 void TaskJogoLogic(void *pvParameters) {
     // Variáveis de estado do jogo isoladas internamente na Task (Sem Race Conditions)
     EstadoJogo estadoAtual = INIT;
@@ -129,6 +69,9 @@ void TaskJogoLogic(void *pvParameters) {
     Jogador leaderboard[5];
     char nomeJogadorAtual[11] = "Player";
 
+    char ultimoNomeJogador[11] = "---";
+    float ultimaPontuacao = 0.0;
+
     EventoToque evento;
     ComandoLED cmdLed;
 
@@ -136,7 +79,7 @@ void TaskJogoLogic(void *pvParameters) {
     char bufferL2[17];
 
     // Carrega o ranking persistente na memória da task local
-    // carregarLeaderboard(leaderboard);
+    carregarLeaderboard(leaderboard, ultimoNomeJogador, &ultimaPontuacao);
 
     for (;;) {
         switch (estadoAtual) {
@@ -147,86 +90,91 @@ void TaskJogoLogic(void *pvParameters) {
                 if ((bits & bitsEsperados) == bitsEsperados) {
                     atualizarDisplay("SISTEMA PRONTO!", "INICIANDO JOGO");
                     vTaskDelay(pdMS_TO_TICKS(1500));
-                    estadoAtual = JOGANDO;
+                    estadoAtual = MENU;
                 } else {
                     atualizarDisplay("Falha na inicializacao do sistema!", "");
-                    atualizarDisplay("Modulos que não responderam:", "");
+                    atualizarDisplay("Modulos que", "não responderam:");
                     if (!(bits & BIT_INIT_DISPLAY)) {atualizarDisplay("- Display LCD", "");};
                     vTaskDelay(pdMS_TO_TICKS(1000));
                     /* if (!(bits & BIT_INIT_LEDS)) {atualizarDisplay("- LEDS NeoPixel", "");};
                     vTaskDelay(pdMS_TO_TICKS(1000));
-                    if (!(bits & BIT_INIT_AUDIO)) {{atualizarDisplay("- DFPlayer", "");};
-                    vTaskDelay(pdMS_TO_TICKS(1000));
-                    if (!(bits & BIT_INIT_KEYPAD)) {{atualizarDisplay("- Teclado", "");};
                     */
-                    if (!(bits & BIT_INIT_GAME)) {{atualizarDisplay("- HARDWARE DO JOGO", "");};
+                    // if (!(bits & BIT_INIT_AUDIO)) {atualizarDisplay("- DFPlayer", "");};
+                    // vTaskDelay(pdMS_TO_TICKS(1000));
+                    if (!(bits & BIT_INIT_KEYPAD)) {atualizarDisplay("- Teclado", "");};
+                    if (!(bits & BIT_INIT_GAME)) {atualizarDisplay("- HARDWARE DO JOGO", "");};
                     vTaskDelay(pdMS_TO_TICKS(1000));
                 }
                 vTaskDelay(pdMS_TO_TICKS(500));
                 break;
             }
-        }
-            /*
-            case MENU:
-                if (digitalRead(BOTAO_START) == LOW) {
-                    estadoAtual = REGISTRAR_NOME;
-                    vTaskDelay(pdMS_TO_TICKS(300));
-                } else if (digitalRead(BOTAO_LEADERBOARD) == LOW) {
-                    estadoAtual = LEADERBOARD;
-                    vTaskDelay(pdMS_TO_TICKS(300));
+            case MENU: {
+                atualizarDisplay("Opcao 1-Jogar", "Opcao 2-Leader");
+                if (xQueueReceive(filaToques, &evento, portMAX_DELAY) == pdTRUE) {
+                    // Verifica se o evento veio do botão do Pad 0 (ou substitua pela lógica desejada)
+                    if (evento.indicePad == 0) { 
+                        estadoAtual = REGISTRAR_NOME;
+                    }else if (evento.indicePad == 1) {
+                        estadoAtual = LEADERBOARD;
+                    }
+                }
+                break;
+            }
+            
+            case LEADERBOARD:{
+                // Exibe as 5 posições do Top 5 + a 6ª posição (Última Jogada)
+                int posicaoExibicao = 0; // 0 a 4 = Top 5 | 5 = Jogador Atual/Última jogada
+                bool sairLeaderboard = false;
+
+                if (filaToques != NULL) {
+                    xQueueReset(filaToques); // Limpa toques antigos
+                }
+
+                while (!sairLeaderboard) {
+                    if (posicaoExibicao < 5) {
+                        snprintf(bufferL1, sizeof(bufferL1), "%d - %s", posicaoExibicao + 1, leaderboard[posicaoExibicao].nome);
+                        snprintf(bufferL2, sizeof(bufferL2), "Pts: %.0f", leaderboard[posicaoExibicao].pontuacao);
+                    } else {
+                        snprintf(bufferL1, sizeof(bufferL1), "6 - %s (Ultimo)", ultimoNomeJogador);
+                        snprintf(bufferL2, sizeof(bufferL2), "Pts: %.0f", ultimaPontuacao);
+                    }
+
+                    atualizarDisplay(bufferL1, bufferL2);
+
+                    // Aguarda interação do jogador para navegar pelas posições
+                    if (xQueueReceive(filaToques, &evento, portMAX_DELAY) == pdTRUE) {
+                        if (evento.indicePad == 0) { 
+                            // Pad 0 avança para o próximo ou volta ao início do ranking
+                            posicaoExibicao = (posicaoExibicao + 1) % 6;
+                        } else if (evento.indicePad == 1) { 
+                            // Pad 1 sai do Leaderboard e retorna ao Menu
+                            sairLeaderboard = true;
+                            estadoAtual = MENU;
+                        }
+                    }
                 }
                 vTaskDelay(pdMS_TO_TICKS(50));
                 break;
+            }
 
-            case LEADERBOARD:
-                if (digitalRead(BOTAO_SAIR) == LOW || digitalRead(BOTAO_START) == LOW) {
-                    estadoAtual = MENU;
-                    vTaskDelay(pdMS_TO_TICKS(300));
-                }
-                vTaskDelay(pdMS_TO_TICKS(50));
-                break;
-
-            case REGISTRAR_NOME:
+            case REGISTRAR_NOME:{
+                atualizarDisplay("DIGITE SEU NOME:","");
                 lerNomeTecladoMatricial(); // Preenche o nome
                 estadoAtual = PREPARAR;
                 break;
+            }
 
-            case PREPARAR:
-                vidas = 3;
-                pontuacaoTotal = 0.0;
-                tempoDeAtivacao = 3000;
-                totalAcertos = 0;
-                somaTemposResposta = 0.0;
-                
+            case JOGANDO:{
+                atualizarDisplay("O JOGO IRA", "COMECAR");
+                vTaskDelay(pdMS_TO_TICKS(2500));
+
                 if (filaToques != NULL) {
                     xQueueReset(filaToques);
                 }
-                
-                while (estadoAtual == PREPARAR) {
-                    vTaskDelay(pdMS_TO_TICKS(50));
-                }
-                
-                // Solicita áudio via fila em vez de chamar diretamente myDFPlayer
-                enviarComandoAudio(AUDIO_PLAY, 1);
-                vTaskDelay(pdMS_TO_TICKS(1000));
 
-                indicePadAtual = random(0, 4);
-                cmdLed = {indicePadAtual, modoDificuldade == 0 ? 2 : 1, COR_AZUL};
-                xQueueSend(filaLEDs, &cmdLed, portMAX_DELAY);
-                
-                instanteAtivacaoPad = millis();
-                estadoAtual = JOGANDO;
-                break;
-            */
-            case JOGANDO:{
                 for (int rodada = 1; rodada <= TOTAL_RODADAS; rodada++) {
                     snprintf(bufferL1, sizeof(bufferL1), "RODADA %d/%d", rodada, TOTAL_RODADAS);
                     atualizarDisplay(bufferL1, "PREPARE-SE!");
-
-                    // Limpa eventos antigos da fila antes de iniciar a jogada
-                    if (filaToques != NULL) {
-                        xQueueReset(filaToques);
-                    }
 
                     // Escolhe um Pad/LED aleatório (0 a 3)
                     int indicePadAtual = random(0, 4);
@@ -248,9 +196,9 @@ void TaskJogoLogic(void *pvParameters) {
                             totalAcertos++;
                             
                             snprintf(bufferL2, sizeof(bufferL2), "+%.0f Pts (%.0fms)", pontoDaVez, tempoReacao);
-                            atualizarDisplay("ACERTOU! :-)", bufferL2);
+                            atualizarDisplay("ACERTOU! :)", bufferL2);
                         } else {
-                            atualizarDisplay("ERROU! :-S", "PAD INCORRETO!");
+                            atualizarDisplay("ERROU! :(", "PAD INCORRETO!");
                         }
                     } else {
                         atualizarDisplay("TEMPO ESGOTADO!", "MUITO LENTO!");
@@ -267,12 +215,31 @@ void TaskJogoLogic(void *pvParameters) {
                 snprintf(bufferL2, sizeof(bufferL2), "TOTAL: %.0f PTS", pontuacaoTotal);
                 atualizarDisplay(bufferL1, bufferL2);
 
-                vTaskDelay(pdMS_TO_TICKS(5000));
+                vTaskDelay(pdMS_TO_TICKS(7000));
                 atualizarDisplay("FIM DE JOGO!", "");
                 vTaskDelay(pdMS_TO_TICKS(2000));
 
-                // Finaliza a Task
-                vTaskDelete(NULL);
+                if (filaToques != NULL) {
+                    xQueueReset(filaToques);
+                }
+
+                atualizarDisplay("Tentar de novo?", "Aperte 2");
+                bool reiniciar = false;
+                while(!reiniciar){
+                    if(xQueueReceive(filaToques,&evento,portMAX_DELAY) == pdTRUE){
+                        if(evento.indicePad == 1){
+                            reiniciar = true;
+                            estadoAtual = MENU;
+                        }
+                        /*
+                        if(evento.indicePad == 0){
+                            reiniciar = true;
+                            estadoAtual = ECONOMIA_DE_ENERGIA;
+                        }
+                        */
+                    }
+                }
+                break;
             } 
         }
     }

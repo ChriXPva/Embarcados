@@ -1,14 +1,9 @@
-/*
-
 #include "keyboard.h"
 #include "display_ui.h"
+#include "leaderboard.h"
 
-static Preferences preferences;
-
+// Buffer global do nome do jogador atual
 char nomeJogadorAtual[11] = "JOGADOR";
-
-// Mapeamento Multi-tap
-
 
 const byte LINHAS = 4;
 const byte COLUNAS = 3;
@@ -20,8 +15,8 @@ char teclas[LINHAS][COLUNAS] = {
     {'*', '0', '#'}
 };
 
-byte pinosLinhas[LINHAS]   = {19, 18, 5, 17}; 
-byte pinosColunas[COLUNAS] = {16, 4, 2};
+byte pinosLinhas[LINHAS]   = {35, 36, 1, 2};
+byte pinosColunas[COLUNAS] = {47, 21, 14};
 
 static Keypad keypad = Keypad(makeKeymap(teclas), pinosLinhas, pinosColunas, LINHAS, COLUNAS);
 
@@ -43,23 +38,6 @@ const MapTecla mapaMultitap[] = {
     {'0', " 0"}
 };
 
-// Funções de Persistência NVS
-void salvarNomeNVS(const char* nome) {
-    Preferences preferences; // Instância local
-    preferences.begin("player_data", false);
-    preferences.putString("nome", nome);
-    preferences.end();
-}
-
-void carregarNomeNVS() {
-    Preferences preferences; // Instância local
-    preferences.begin("player_data", true);
-    String nomeSalvo = preferences.getString("nome", "JOGADOR");
-    strncpy(nomeJogadorAtual, nomeSalvo.c_str(), sizeof(nomeJogadorAtual) - 1);
-    nomeJogadorAtual[sizeof(nomeJogadorAtual) - 1] = '\0';
-    preferences.end();
-}
-
 const char* getCaracteresDaTecla(char tecla) {
     for (int i = 0; i < 10; i++) {
         if (mapaMultitap[i].tecla == tecla) {
@@ -70,46 +48,13 @@ const char* getCaracteresDaTecla(char tecla) {
 }
 
 void initKeypad(void *pvParameters) {
-    ComandoDisplay cmdLed;
-    cmdLed.tipo = DISPLAY_TEXTO;
-    strncpy(cmdLed.textoLinha1, "ERRO NO TECLADO!", sizeof(cmdLed.textoLinha1));
-    xQueueSend(filaDisplay, &cmdLed, 0);
-    vTaskDelete(NULL);
     keypad.setDebounceTime(20);
 
-    // Carrega o nome armazenado anteriormente na inicialização
-    carregarNomeNVS();
-
-    if (xInitEventGroup != NULL) {
-        xEventGroupSetBits(xInitEventGroup, BIT_INIT_KEYPAD);
-    }
+    // Carrega o nome armazenado no NVS
+    carregarNomeNVS(nomeJogadorAtual, sizeof(nomeJogadorAtual));
+    xEventGroupSetBits(xInitEventGroup, BIT_INIT_KEYPAD);
     
     vTaskDelete(NULL);
-}
-
-// Função auxiliar estática para atualizar o LCD via fila durante a edição do nome
-static void atualizarDisplayNome(const char* nome, int posCursor, bool comCursor) {
-    ComandoDisplay cmd;
-    cmd.tipo = DISPLAY_TEXTO;
-    
-    // Linha 1 fixa
-    strncpy(cmd.textoLinha1, "DIGITE SEU NOME:", sizeof(cmd.textoLinha1));
-    
-    // Monta a Linha 2 com o nome e o cursor '_'
-    char linha2[17] = "";
-    strncpy(linha2, nome, sizeof(linha2) - 1);
-    
-    // Adiciona o caractere de underline se estiver aguardando confirmação do caractere/timeout
-    if (comCursor && strlen(linha2) < 16) {
-        int len = strlen(linha2);
-        linha2[len] = '_';
-        linha2[len + 1] = '\0';
-    }
-    
-    strncpy(cmd.textoLinha2, linha2, sizeof(cmd.textoLinha2));
-    
-    // Envia para a fila do display (com timeout 0 para não travar a digitação)
-    xQueueSend(filaDisplay, &cmd, 0);
 }
 
 void lerNomeTecladoMatricial() {
@@ -121,41 +66,45 @@ void lerNomeTecladoMatricial() {
     unsigned long ultimoTempoPressionado = 0;
     bool aguardandoTimeout = false;
 
-    // Tela inicial de digitação
-    atualizarDisplayNome(nomeTemp, posCursor, true);
+    char bufferLinha2[17] = "";
+
+    // Exibe tela inicial de digitação com o cursor indicativo '_'
+    snprintf(bufferLinha2, sizeof(bufferLinha2), "%s_", nomeTemp);
+    atualizarDisplay("DIGITE SEU NOME:", bufferLinha2);
 
     while (true) {
-        // Leitura direta do teclado de membrana via biblioteca Keypad
         char tecla = keypad.getKey();
         unsigned long agora = millis();
 
-        // 1. TIMEOUT DO MULTI-TAP (800ms)
+        // 1. TIMEOUT DO MULTI-TAP (800ms sem pressionar a mesma tecla)
+        // Confirma a letra atual e avança o cursor para a próxima posição
         if (aguardandoTimeout && (agora - ultimoTempoPressionado > 800)) {
             posCursor++;
-            if (posCursor > 9) posCursor = 9;
+            if (posCursor > 9) posCursor = 9; // Limite de 10 caracteres
             
             aguardandoTimeout = false;
             ultimaTecla = '\0';
             
-            atualizarDisplayNome(nomeTemp, posCursor, true);
+            // Renderiza o nome confirmado + o cursor '_' na posição atual
+            snprintf(bufferLinha2, sizeof(bufferLinha2), "%s_", nomeTemp);
+            atualizarDisplay("DIGITE SEU NOME:", bufferLinha2);
         }
 
         // 2. PROCESSAMENTO DAS TECLAS
         if (tecla != NO_KEY) {
             
-            if (tecla == '#') { // CONFIRMAR
-                if (posCursor == 0 && !aguardandoTimeout) {
+            if (tecla == '#') { // CONFIRMAR E GRAVAR NOME
+                if (posCursor == 0 && !aguardandoTimeout && strlen(nomeTemp) == 0) {
                     strcpy(nomeJogadorAtual, "JOGADOR");
                 } else {
-                    nomeTemp[posCursor + (aguardandoTimeout ? 1 : 0)] = '\0';
-                    strncpy(nomeJogadorAtual, nomeTemp, 10);
-                    nomeJogadorAtual[10] = '\0';
+                    strncpy(nomeJogadorAtual, nomeTemp, sizeof(nomeJogadorAtual) - 1);
+                    nomeJogadorAtual[sizeof(nomeJogadorAtual) - 1] = '\0';
                 }
 
                 salvarNomeNVS(nomeJogadorAtual);
-                break; // Sai do loop de leitura de nome
+                break; // Encerra a leitura
             }
-            else if (tecla == '*') { // BACKSPACE
+            else if (tecla == '*') { // BACKSPACE (APAGAR)
                 if (aguardandoTimeout) {
                     aguardandoTimeout = false;
                     nomeTemp[posCursor] = '\0';
@@ -164,16 +113,20 @@ void lerNomeTecladoMatricial() {
                     nomeTemp[posCursor] = '\0';
                 }
                 ultimaTecla = '\0';
-                atualizarDisplayNome(nomeTemp, posCursor, true);
+
+                snprintf(bufferLinha2, sizeof(bufferLinha2), "%s_", nomeTemp);
+                atualizarDisplay("DIGITE SEU NOME:", bufferLinha2);
             }
-            else { // TECLAS NUMÉRICAS (0-9)
+            else { // TECLAS NUMÉRICAS (0 a 9)
                 const char* opcoes = getCaracteresDaTecla(tecla);
                 if (opcoes != NULL) {
                     int numOpcoes = strlen(opcoes);
 
                     if (tecla == ultimaTecla && aguardandoTimeout) {
+                        // Mesma tecla pressionada rapidamente: Cicla para a próxima caractere (ex: A -> B -> C -> 1)
                         subIndice = (subIndice + 1) % numOpcoes;
                     } else {
+                        // Tecla diferente pressionada: Se havia um timeout pendente, fixa o caractere e avança o cursor
                         if (aguardandoTimeout) {
                             posCursor++;
                             if (posCursor > 9) posCursor = 9;
@@ -181,6 +134,7 @@ void lerNomeTecladoMatricial() {
                         subIndice = 0;
                     }
 
+                    // Escreve/sobrescreve o caractere selecionado no cursor atual
                     char letraAtual = opcoes[subIndice];
                     nomeTemp[posCursor] = letraAtual;
                     nomeTemp[posCursor + 1] = '\0';
@@ -189,20 +143,17 @@ void lerNomeTecladoMatricial() {
                     ultimoTempoPressionado = agora;
                     aguardandoTimeout = true;
 
-                    atualizarDisplayNome(nomeTemp, posCursor, false);
+                    // Atualiza dinamicamente o LCD exibindo a letra ciclada no final do buffer
+                    snprintf(bufferLinha2, sizeof(bufferLinha2), "%s", nomeTemp);
+                    atualizarDisplay("DIGITE SEU NOME:", bufferLinha2);
                 }
             }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(20)); // Cede o controle ao FreeRTOS e evita estouro de Watchdog
+        vTaskDelay(pdMS_TO_TICKS(20)); // Cede o controle ao FreeRTOS e evita Watchdog Reset
     }
 
-    // Tela final confirmando o nome gravado
-    ComandoDisplay cmdFinal;
-    cmdFinal.tipo = DISPLAY_TEXTO;
-    strncpy(cmdFinal.textoLinha1, "NOME GRAVADO:", sizeof(cmdFinal.textoLinha1));
-    strncpy(cmdFinal.textoLinha2, nomeJogadorAtual, sizeof(cmdFinal.textoLinha2));
-    xQueueSend(filaDisplay, &cmdFinal, portMAX_DELAY);
+    // Tela final de confirmação do nome gravado
+    atualizarDisplay("NOME GRAVADO:", nomeJogadorAtual);
+    vTaskDelay(pdMS_TO_TICKS(1500));
 }
-
-*/

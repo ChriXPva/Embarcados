@@ -28,8 +28,8 @@ void setup() {
     // Criação das Tasks no FreeRTOS
     xTaskCreatePinnedToCore(initDisplay,"Display", 4096, NULL, 1, &taskHandleInitDisplay, 1);
     // xTaskCreatePinnedToCore(initLeds,"LEDs",  2048, NULL, 1, &taskHandleInitLEDs, 1);
-    // xTaskCreatePinnedToCore(initAudio,"Audio",  2048, NULL, 1, &taskHandleInitAudio, 1);
-    // xTaskCreatePinnedToCore(initKeypad,"Keypad",  2048, NULL, 1, &taskHandleInitKeypad, 0);
+    // xTaskCreatePinnedToCore(initAudio,"Audio",  4096, NULL, 1, &taskHandleInitAudio, 1);
+    xTaskCreatePinnedToCore(initKeypad,"Keypad",  2048, NULL, 1, &taskHandleInitKeypad, 0);
     xTaskCreatePinnedToCore(TaskLCD_UI, "UI Display", 4096, NULL, 1, &taskHandleEscreverDisplay, 1);
     xTaskCreatePinnedToCore(initGameHardware, "Game Hardware", 2048, NULL, 1, &taskHandleGameHardware, 1);
     xTaskCreatePinnedToCore(TaskJogoLogic,"Game",  4096, NULL, 1, &taskHandleGameLogic, 0);

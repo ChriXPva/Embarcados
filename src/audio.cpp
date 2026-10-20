@@ -48,18 +48,21 @@ void TaskAudio(void *pvParameters) {
     }
 }
 
-
+*/
 
 #include "audio.h"
 
 static DFRobotDFPlayerMini myDFPlayer;
 
 void initAudio(void *pvParameters) {
+    vTaskDelay(pdMS_TO_TICKS(1500));
+
     Serial2.begin(9600, SERIAL_8N1, DFPLAYER_RX, DFPLAYER_TX);
+
+    vTaskDelay(pdMS_TO_TICKS(500));
 
     if (!myDFPlayer.begin(Serial2)) {
         Serial.println("ERRO NO AUDIO!");
-        while (true) vTaskDelay(pdMS_TO_TICKS(100));
     }
     myDFPlayer.start();
     myDFPlayer.setTimeOut(500);
@@ -82,7 +85,7 @@ void initAudio(void *pvParameters) {
     vTaskDelay(pdMS_TO_TICKS(1000));
     myDFPlayer.pause();
     vTaskDelay(pdMS_TO_TICKS(1000)); 
-    xEventGroupSetBits(xInitEventGroup, BIT_INIT_AUDIO);
+    // xEventGroupSetBits(xInitEventGroup, BIT_INIT_AUDIO);
     vTaskDelete(NULL); // Libera memória
 }
 
@@ -108,4 +111,3 @@ void TaskAudio(void *pvParameters) {
         }
     }
 }
-*/

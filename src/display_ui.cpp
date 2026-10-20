@@ -4,7 +4,6 @@
 static LiquidCrystal_I2C lcd(0x27, 16, 2); // Endereço I2C do display LCD 16x2
 
 void initDisplay(void *pvParameters) {
-    Wire.begin(8,9);
     lcd.init();
     lcd.backlight();
     lcd.setCursor(0, 0);
@@ -23,6 +22,18 @@ void initDisplay(void *pvParameters) {
     xEventGroupSetBits(xInitEventGroup, BIT_INIT_DISPLAY);
     vTaskDelay(pdMS_TO_TICKS(500));
     vTaskDelete(NULL); // Finaliza a task após a inicialização
+}
+
+void atualizarDisplay(const char* linha1, const char* linha2) {
+    if (filaDisplay != NULL) {
+        ComandoDisplay cmdDisplay;
+        memset(&cmdDisplay, 0, sizeof(ComandoDisplay));
+        
+        strncpy(cmdDisplay.textoLinha1, linha1, sizeof(cmdDisplay.textoLinha1) - 1);
+        strncpy(cmdDisplay.textoLinha2, linha2, sizeof(cmdDisplay.textoLinha2) - 1);
+        
+        xQueueSend(filaDisplay, &cmdDisplay, pdMS_TO_TICKS(1000));
+    }
 }
 
 void TaskLCD_UI(void *pvParameters) {
