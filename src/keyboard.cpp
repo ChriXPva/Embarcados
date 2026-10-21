@@ -15,7 +15,7 @@ char teclas[LINHAS][COLUNAS] = {
     {'*', '0', '#'}
 };
 
-byte pinosLinhas[LINHAS]   = {35, 36, 1, 2};
+byte pinosLinhas[LINHAS]   = {1, 2, 36, 35};
 byte pinosColunas[COLUNAS] = {47, 21, 14};
 
 static Keypad keypad = Keypad(makeKeymap(teclas), pinosLinhas, pinosColunas, LINHAS, COLUNAS);
@@ -77,16 +77,19 @@ void lerNomeTecladoMatricial() {
         unsigned long agora = millis();
 
         // 1. TIMEOUT DO MULTI-TAP (800ms sem pressionar a mesma tecla)
-        // Confirma a letra atual e avança o cursor para a próxima posição
         if (aguardandoTimeout && (agora - ultimoTempoPressionado > 800)) {
             posCursor++;
-            if (posCursor > 9) posCursor = 9; // Limite de 10 caracteres
+            if (posCursor > 10) posCursor = 10; // 10 indica que o buffer (0..9) está cheio
             
             aguardandoTimeout = false;
             ultimaTecla = '\0';
             
-            // Renderiza o nome confirmado + o cursor '_' na posição atual
-            snprintf(bufferLinha2, sizeof(bufferLinha2), "%s_", nomeTemp);
+            // Se o limite de 10 caracteres não foi atingido, desenha o cursor "_"
+            if (posCursor < 10) {
+                snprintf(bufferLinha2, sizeof(bufferLinha2), "%s_", nomeTemp);
+            } else {
+                snprintf(bufferLinha2, sizeof(bufferLinha2), "%s", nomeTemp);
+            }
             atualizarDisplay("DIGITE SEU NOME:", bufferLinha2);
         }
 
@@ -94,7 +97,7 @@ void lerNomeTecladoMatricial() {
         if (tecla != NO_KEY) {
             
             if (tecla == '#') { // CONFIRMAR E GRAVAR NOME
-                if (posCursor == 0 && !aguardandoTimeout && strlen(nomeTemp) == 0) {
+                if (strlen(nomeTemp) == 0) {
                     strcpy(nomeJogadorAtual, "JOGADOR");
                 } else {
                     strncpy(nomeJogadorAtual, nomeTemp, sizeof(nomeJogadorAtual) - 1);
@@ -123,18 +126,21 @@ void lerNomeTecladoMatricial() {
                     int numOpcoes = strlen(opcoes);
 
                     if (tecla == ultimaTecla && aguardandoTimeout) {
-                        // Mesma tecla pressionada rapidamente: Cicla para a próxima caractere (ex: A -> B -> C -> 1)
                         subIndice = (subIndice + 1) % numOpcoes;
                     } else {
-                        // Tecla diferente pressionada: Se havia um timeout pendente, fixa o caractere e avança o cursor
                         if (aguardandoTimeout) {
                             posCursor++;
-                            if (posCursor > 9) posCursor = 9;
+                        }
+                        // Ignora novas teclas numéricas se já atingiu 10 caracteres confirmados
+                        if (posCursor >= 10) {
+                            posCursor = 10;
+                            aguardandoTimeout = false;
+                            ultimaTecla = '\0';
+                            continue;
                         }
                         subIndice = 0;
                     }
 
-                    // Escreve/sobrescreve o caractere selecionado no cursor atual
                     char letraAtual = opcoes[subIndice];
                     nomeTemp[posCursor] = letraAtual;
                     nomeTemp[posCursor + 1] = '\0';
@@ -143,17 +149,15 @@ void lerNomeTecladoMatricial() {
                     ultimoTempoPressionado = agora;
                     aguardandoTimeout = true;
 
-                    // Atualiza dinamicamente o LCD exibindo a letra ciclada no final do buffer
                     snprintf(bufferLinha2, sizeof(bufferLinha2), "%s", nomeTemp);
                     atualizarDisplay("DIGITE SEU NOME:", bufferLinha2);
                 }
             }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(20)); // Cede o controle ao FreeRTOS e evita Watchdog Reset
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
 
-    // Tela final de confirmação do nome gravado
     atualizarDisplay("NOME GRAVADO:", nomeJogadorAtual);
     vTaskDelay(pdMS_TO_TICKS(1500));
 }

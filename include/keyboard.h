@@ -3,6 +3,9 @@
 
 #include "config.h"
 
+// Permite que o módulo de game_logic acesse a variável preenchida pelo teclado
+extern char nomeJogadorAtual[11];
+
 void initKeypad(void *pvParameters);
 void lerNomeTecladoMatricial();
 char traduzirEventoTCA(uint8_t keyEvent);
