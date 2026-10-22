@@ -1,6 +1,7 @@
 #include "game_logic.h"
 #include "display_ui.h"
 #include "leaderboard.h"
+#include "keyboard.h"
 
 static Preferences prefs;
 
@@ -67,7 +68,6 @@ void TaskJogoLogic(void *pvParameters) {
     const unsigned long TEMPO_LIMITE_MS = 3000;
 
     Jogador leaderboard[5];
-    char nomeJogadorAtual[11] = "Player";
 
     char ultimoNomeJogador[11] = "---";
     float ultimaPontuacao = 0.0;
@@ -160,7 +160,7 @@ void TaskJogoLogic(void *pvParameters) {
             case REGISTRAR_NOME:{
                 atualizarDisplay("DIGITE SEU NOME:","");
                 lerNomeTecladoMatricial(); // Preenche o nome
-                estadoAtual = PREPARAR;
+                estadoAtual = JOGANDO;
                 break;
             }
 
@@ -171,6 +171,9 @@ void TaskJogoLogic(void *pvParameters) {
                 if (filaToques != NULL) {
                     xQueueReset(filaToques);
                 }
+
+                pontuacaoTotal = 0.0;
+                totalAcertos = 0;
 
                 for (int rodada = 1; rodada <= TOTAL_RODADAS; rodada++) {
                     snprintf(bufferL1, sizeof(bufferL1), "RODADA %d/%d", rodada, TOTAL_RODADAS);
@@ -214,6 +217,8 @@ void TaskJogoLogic(void *pvParameters) {
                 snprintf(bufferL1, sizeof(bufferL1), "ACERTOS: %d/%d", totalAcertos, TOTAL_RODADAS);
                 snprintf(bufferL2, sizeof(bufferL2), "TOTAL: %.0f PTS", pontuacaoTotal);
                 atualizarDisplay(bufferL1, bufferL2);
+
+                atualizarRanking(leaderboard, nomeJogadorAtual, pontuacaoTotal, ultimoNomeJogador, &ultimaPontuacao);
 
                 vTaskDelay(pdMS_TO_TICKS(7000));
                 atualizarDisplay("FIM DE JOGO!", "");
