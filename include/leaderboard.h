@@ -8,6 +8,7 @@
 void carregarLeaderboard(Jogador* leaderboard, char* ultimoNome, float* ultimoPts);
 void salvarLeaderboard(const Jogador* leaderboard, const char* ultimoNome, float ultimoPts);
 void atualizarRanking(Jogador* leaderboard, const char* nome, float pontos, char* ultimoNome, float* ultimoPts);
+void initLeaderboard(void *pvParameters);
 
 void salvarNomeNVS(const char* nome);
 void carregarNomeNVS(char* bufferNome, size_t tamanhoBuffer);

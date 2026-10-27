@@ -3,8 +3,6 @@
 #include "leaderboard.h"
 #include "keyboard.h"
 
-static Preferences prefs;
-
 constexpr int PINS_PADS[4] = {38, 39, 40, 41};
 constexpr int PINS_LEDS[4] = {19, 20, 3, 46};
 
@@ -57,7 +55,7 @@ void initGameHardware(void *pvParameters) {
 }
 
 void TaskJogoLogic(void *pvParameters) {
-    // Variáveis de estado do jogo isoladas internamente na Task (Sem Race Conditions)
+    // Variáveis de estado do jogo isoladas internamente na Task
     EstadoJogo estadoAtual = INIT;
     int vidas = 3;
     unsigned long instanteAtivacaoPad = 0;
@@ -68,7 +66,6 @@ void TaskJogoLogic(void *pvParameters) {
     const unsigned long TEMPO_LIMITE_MS = 3000;
 
     Jogador leaderboard[5];
-
     char ultimoNomeJogador[11] = "---";
     float ultimaPontuacao = 0.0;
 
@@ -78,52 +75,44 @@ void TaskJogoLogic(void *pvParameters) {
     char bufferL1[17];
     char bufferL2[17];
 
-    // Carrega o ranking persistente na memória da task local
-    carregarLeaderboard(leaderboard, ultimoNomeJogador, &ultimaPontuacao);
-
     for (;;) {
         switch (estadoAtual) {
             case INIT: {
                 // Aguarda todos os subsistemas sinalizarem inicialização
                 EventBits_t bits = xEventGroupWaitBits(xInitEventGroup, ALL_INIT_BITS, pdFALSE, pdTRUE, pdMS_TO_TICKS(5000));
-                const EventBits_t bitsEsperados = ALL_INIT_BITS; // Ajuste conforme os módulos que você deseja verificar
+                const EventBits_t bitsEsperados = ALL_INIT_BITS;
+                
                 if ((bits & bitsEsperados) == bitsEsperados) {
+                    carregarLeaderboard(leaderboard, ultimoNomeJogador, &ultimaPontuacao);
                     atualizarDisplay("SISTEMA PRONTO!", "INICIANDO JOGO");
                     vTaskDelay(pdMS_TO_TICKS(1500));
                     estadoAtual = MENU;
                 } else {
-                    atualizarDisplay("Falha na inicializacao do sistema!", "");
-                    atualizarDisplay("Modulos que", "não responderam:");
-                    if (!(bits & BIT_INIT_DISPLAY)) {atualizarDisplay("- Display LCD", "");};
+                    atualizarDisplay("Falha na inicializacao!", "");
                     vTaskDelay(pdMS_TO_TICKS(1000));
-                    /* if (!(bits & BIT_INIT_LEDS)) {atualizarDisplay("- LEDS NeoPixel", "");};
-                    vTaskDelay(pdMS_TO_TICKS(1000));
-                    */
-                    // if (!(bits & BIT_INIT_AUDIO)) {atualizarDisplay("- DFPlayer", "");};
-                    // vTaskDelay(pdMS_TO_TICKS(1000));
-                    if (!(bits & BIT_INIT_KEYPAD)) {atualizarDisplay("- Teclado", "");};
-                    if (!(bits & BIT_INIT_GAME)) {atualizarDisplay("- HARDWARE DO JOGO", "");};
+                    if (!(bits & BIT_INIT_DISPLAY)) { atualizarDisplay("- Display LCD", ""); }
+                    if (!(bits & BIT_INIT_KEYPAD))  { atualizarDisplay("- Teclado", ""); }
+                    if (!(bits & BIT_INIT_GAME))    { atualizarDisplay("- HARDWARE JOGO", ""); }
                     vTaskDelay(pdMS_TO_TICKS(1000));
                 }
                 vTaskDelay(pdMS_TO_TICKS(500));
                 break;
             }
+
             case MENU: {
                 atualizarDisplay("Opcao 1-Jogar", "Opcao 2-Leader");
                 if (xQueueReceive(filaToques, &evento, portMAX_DELAY) == pdTRUE) {
-                    // Verifica se o evento veio do botão do Pad 0 (ou substitua pela lógica desejada)
                     if (evento.indicePad == 0) { 
                         estadoAtual = REGISTRAR_NOME;
-                    }else if (evento.indicePad == 1) {
+                    } else if (evento.indicePad == 1) {
                         estadoAtual = LEADERBOARD;
                     }
                 }
                 break;
             }
             
-            case LEADERBOARD:{
-                // Exibe as 5 posições do Top 5 + a 6ª posição (Última Jogada)
-                int posicaoExibicao = 0; // 0 a 4 = Top 5 | 5 = Jogador Atual/Última jogada
+            case LEADERBOARD: {
+                int posicaoExibicao = 0; 
                 bool sairLeaderboard = false;
 
                 if (filaToques != NULL) {
@@ -132,22 +121,19 @@ void TaskJogoLogic(void *pvParameters) {
 
                 while (!sairLeaderboard) {
                     if (posicaoExibicao < 5) {
-                        snprintf(bufferL1, sizeof(bufferL1), "%d - %s", posicaoExibicao + 1, leaderboard[posicaoExibicao].nome);
+                        snprintf(bufferL1, sizeof(bufferL1), "%d-%s", posicaoExibicao + 1, leaderboard[posicaoExibicao].nome);
                         snprintf(bufferL2, sizeof(bufferL2), "Pts: %.0f", leaderboard[posicaoExibicao].pontuacao);
                     } else {
-                        snprintf(bufferL1, sizeof(bufferL1), "6 - %s (Ultimo)", ultimoNomeJogador);
+                        snprintf(bufferL1, sizeof(bufferL1), "6-%s (Ultimo)", ultimoNomeJogador);
                         snprintf(bufferL2, sizeof(bufferL2), "Pts: %.0f", ultimaPontuacao);
                     }
 
                     atualizarDisplay(bufferL1, bufferL2);
 
-                    // Aguarda interação do jogador para navegar pelas posições
                     if (xQueueReceive(filaToques, &evento, portMAX_DELAY) == pdTRUE) {
                         if (evento.indicePad == 0) { 
-                            // Pad 0 avança para o próximo ou volta ao início do ranking
                             posicaoExibicao = (posicaoExibicao + 1) % 6;
                         } else if (evento.indicePad == 1) { 
-                            // Pad 1 sai do Leaderboard e retorna ao Menu
                             sairLeaderboard = true;
                             estadoAtual = MENU;
                         }
@@ -157,14 +143,14 @@ void TaskJogoLogic(void *pvParameters) {
                 break;
             }
 
-            case REGISTRAR_NOME:{
-                atualizarDisplay("DIGITE SEU NOME:","");
-                lerNomeTecladoMatricial(); // Preenche o nome
+            case REGISTRAR_NOME: {
+                atualizarDisplay("DIGITE SEU NOME:", "");
+                lerNomeTecladoMatricial(); 
                 estadoAtual = JOGANDO;
                 break;
             }
 
-            case JOGANDO:{
+            case JOGANDO: {
                 atualizarDisplay("O JOGO IRA", "COMECAR");
                 vTaskDelay(pdMS_TO_TICKS(2500));
 
@@ -172,30 +158,30 @@ void TaskJogoLogic(void *pvParameters) {
                     xQueueReset(filaToques);
                 }
 
+                // --- RESET DE VARIÁVEIS DA RODADA ---
                 pontuacaoTotal = 0.0;
+                somaTemposResposta = 0.0;
                 totalAcertos = 0;
+                vidas = 3;
 
                 for (int rodada = 1; rodada <= TOTAL_RODADAS; rodada++) {
                     snprintf(bufferL1, sizeof(bufferL1), "RODADA %d/%d", rodada, TOTAL_RODADAS);
                     atualizarDisplay(bufferL1, "PREPARE-SE!");
 
-                    // Escolhe um Pad/LED aleatório (0 a 3)
                     int indicePadAtual = random(0, 4);
 
-                    // Acende o LED correspondente
                     digitalWrite(PINS_LEDS[indicePadAtual], HIGH);
                     atualizarDisplay(bufferL1, "PRESSIONE O PAD!");
-                    unsigned long instanteAtivacaoPad = millis();
+                    instanteAtivacaoPad = millis();
 
-                    // Aguarda a resposta do usuário via fila do FreeRTOS até o limite de 3 segundos
                     if (xQueueReceive(filaToques, &evento, pdMS_TO_TICKS(TEMPO_LIMITE_MS)) == pdTRUE) {
-                        // Verifica se o usuário pressionou o Pad correto
                         if (evento.indicePad == indicePadAtual) {
                             float tempoReacao = (float)(evento.instanteToque - instanteAtivacaoPad);
                             float pontoDaVez = 1000.0 - (0.5 * tempoReacao);
                             if (pontoDaVez < 0) pontoDaVez = 0;
 
                             pontuacaoTotal += pontoDaVez;
+                            somaTemposResposta += tempoReacao;
                             totalAcertos++;
                             
                             snprintf(bufferL2, sizeof(bufferL2), "+%.0f Pts (%.0fms)", pontoDaVez, tempoReacao);
@@ -207,41 +193,40 @@ void TaskJogoLogic(void *pvParameters) {
                         atualizarDisplay("TEMPO ESGOTADO!", "MUITO LENTO!");
                     }
 
-                    // Apaga o LED ativo
                     digitalWrite(PINS_LEDS[indicePadAtual], LOW);
-
-                    // Intervalo entre rodadas
                     vTaskDelay(pdMS_TO_TICKS(1000));
                 }
 
+                // Final da Partida
                 snprintf(bufferL1, sizeof(bufferL1), "ACERTOS: %d/%d", totalAcertos, TOTAL_RODADAS);
                 snprintf(bufferL2, sizeof(bufferL2), "TOTAL: %.0f PTS", pontuacaoTotal);
                 atualizarDisplay(bufferL1, bufferL2);
 
                 atualizarRanking(leaderboard, nomeJogadorAtual, pontuacaoTotal, ultimoNomeJogador, &ultimaPontuacao);
 
-                vTaskDelay(pdMS_TO_TICKS(7000));
+                vTaskDelay(pdMS_TO_TICKS(5000));
                 atualizarDisplay("FIM DE JOGO!", "");
-                vTaskDelay(pdMS_TO_TICKS(2000));
+                vTaskDelay(pdMS_TO_TICKS(1500));
 
                 if (filaToques != NULL) {
                     xQueueReset(filaToques);
                 }
 
-                atualizarDisplay("Tentar de novo?", "Aperte 2");
-                bool reiniciar = false;
-                while(!reiniciar){
-                    if(xQueueReceive(filaToques,&evento,portMAX_DELAY) == pdTRUE){
-                        if(evento.indicePad == 1){
-                            reiniciar = true;
+                // --- DECISÃO DE REJOGABILIDADE ---
+                atualizarDisplay("Tentar de novo?", "1 - JGR | 2 - MENU");
+                
+                bool decisaoTomada = false;
+                while (!decisaoTomada) {
+                    if (xQueueReceive(filaToques, &evento, portMAX_DELAY) == pdTRUE) {
+                        if (evento.indicePad == 0) { 
+                            // Opção 1: Jogar novamente (Mantém o mesmo nome e reinicia no estado JOGANDO)
+                            estadoAtual = JOGANDO;
+                            decisaoTomada = true;
+                        } else if (evento.indicePad == 1) { 
+                            // Opção 2: Volta para o Menu Principal
                             estadoAtual = MENU;
+                            decisaoTomada = true;
                         }
-                        /*
-                        if(evento.indicePad == 0){
-                            reiniciar = true;
-                            estadoAtual = ECONOMIA_DE_ENERGIA;
-                        }
-                        */
                     }
                 }
                 break;

@@ -4,6 +4,8 @@
 #include "audio.h"
 #include "keyboard.h"
 #include "game_logic.h"
+#include "leaderboard.h"
+#include <nvs_flash.h>
 
 EventGroupHandle_t xInitEventGroup = NULL;
 TaskHandle_t taskHandleInitDisplay=NULL;
@@ -20,6 +22,14 @@ QueueHandle_t filaAudio = NULL;
 QueueHandle_t filaDisplay = NULL;
 void setup() {
     Serial.begin(115200);
+
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+
     xInitEventGroup = xEventGroupCreate();
     filaToques      = xQueueCreate(10, sizeof(EventoToque));
     filaLEDs       = xQueueCreate(10, sizeof(ComandoLED));

@@ -1,10 +1,9 @@
 #include "leaderboard.h"
 #include <Preferences.h>
-
-// Instância estática do Preferences isolada apenas dentro deste .cpp
-static Preferences prefs;
+#include <nvs_flash.h>
 
 void carregarLeaderboard(Jogador* leaderboard, char* ultimoNome, float* ultimoPts) {
+    Preferences prefs;
     prefs.begin("leaderboard", true); // Modo Leitura
 
     // Carrega Top 5
@@ -29,6 +28,7 @@ void carregarLeaderboard(Jogador* leaderboard, char* ultimoNome, float* ultimoPt
 }
 
 void salvarLeaderboard(const Jogador* leaderboard, const char* ultimoNome, float ultimoPts) {
+    Preferences prefs;
     prefs.begin("leaderboard", false); // Modo Escrita
 
     // Salva Top 5
@@ -72,12 +72,14 @@ void atualizarRanking(Jogador* leaderboard, const char* nome, float pontos, char
 }
 
 void salvarNomeNVS(const char* nome) {
+    Preferences prefs;
     prefs.begin("player_data", false);
     prefs.putString("nome", nome);
     prefs.end();
 }
 
 void carregarNomeNVS(char* bufferNome, size_t tamanhoBuffer) {
+    Preferences prefs;
     prefs.begin("player_data", true);
     String nomeSalvo = prefs.getString("nome", "JOGADOR");
     strncpy(bufferNome, nomeSalvo.c_str(), tamanhoBuffer - 1);
