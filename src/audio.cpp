@@ -21,7 +21,7 @@ void initAudio(void *pvParameters) {
     vTaskDelete(NULL); // Libera memória
 }
 
-void TaskAudio(void *pvParameters) {
+void taskAudio(void *pvParameters) {
     ComandoAudio cmd;
 
     for (;;) {
@@ -41,5 +41,12 @@ void TaskAudio(void *pvParameters) {
                     break;
             }
         }
+    }
+}
+
+void enviarComandoAudio(AcaoAudio acao, int faixa) {
+    if (filaAudio != NULL) {
+        ComandoAudio cmd = {acao, faixa};
+        xQueueSend(filaAudio, &cmd, pdMS_TO_TICKS(50));
     }
 }

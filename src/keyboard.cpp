@@ -1,6 +1,7 @@
 #include "keyboard.h"
 #include "display_ui.h"
 #include "leaderboard.h"
+#include "audio.h"
 
 // Buffer global do nome do jogador atual
 char nomeJogadorAtual[11] = "JOGADOR";
@@ -47,6 +48,18 @@ const char* getCaracteresDaTecla(char tecla) {
     return NULL;
 }
 
+char lerTecla() {
+    char tecla = '\0';
+    while (tecla == '\0') {
+        tecla = keypad.getKey();
+        vTaskDelay(pdMS_TO_TICKS(20)); // Libera o processador para evitar o Watchdog Reset
+    }
+    if(tecla != '*' && tecla != '#') {
+        enviarComandoAudio(AUDIO_PLAY, 5);
+    }
+    return tecla;
+}
+
 void initKeypad(void *pvParameters) {
     keypad.setDebounceTime(20);
 
@@ -73,7 +86,8 @@ void lerNomeTecladoMatricial() {
     atualizarDisplay("DIGITE SEU NOME:", bufferLinha2);
 
     while (true) {
-        char tecla = keypad.getKey();
+        char tecla = lerTecla();
+
         unsigned long agora = millis();
 
         // 1. TIMEOUT DO MULTI-TAP (800ms sem pressionar a mesma tecla)
@@ -97,6 +111,7 @@ void lerNomeTecladoMatricial() {
         if (tecla != NO_KEY) {
             
             if (tecla == '#') { // CONFIRMAR E GRAVAR NOME
+                enviarComandoAudio(AUDIO_PLAY, 6); // TROCAR PARA SOM DE CONFIRMA DA URNA
                 if (strlen(nomeTemp) == 0) {
                     strcpy(nomeJogadorAtual, "JOGADOR");
                 } else {
@@ -108,6 +123,7 @@ void lerNomeTecladoMatricial() {
                 break; // Encerra a leitura
             }
             else if (tecla == '*') { // BACKSPACE (APAGAR)
+                enviarComandoAudio(AUDIO_PLAY, 7); // TROCAR PARA SOM DE BACKSPACE
                 if (aguardandoTimeout) {
                     aguardandoTimeout = false;
                     nomeTemp[posCursor] = '\0';

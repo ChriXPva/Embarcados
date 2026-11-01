@@ -76,7 +76,7 @@ extern QueueHandle_t filaLEDs;
 extern QueueHandle_t filaAudio;
 extern QueueHandle_t filaDisplay;
 extern TaskHandle_t taskHandleInitDisplay, taskHandleInitLEDs, taskHandleInitAudio, taskHandleInitKeypad, taskHandleGameLogic, taskHandleGameHardware,
-taskHandleEscreverDisplay;
+taskHandleEscreverDisplay, taskHandleComunicarAudio;
 extern EventGroupHandle_t xInitEventGroup;
 extern TimerHandle_t timerApagarLED[4];
 

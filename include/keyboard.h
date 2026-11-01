@@ -8,6 +8,6 @@ extern char nomeJogadorAtual[11];
 
 void initKeypad(void *pvParameters);
 void lerNomeTecladoMatricial();
-char traduzirEventoTCA(uint8_t keyEvent);
+char lerTecla();
 
 #endif

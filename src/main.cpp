@@ -15,6 +15,7 @@ TaskHandle_t taskHandleInitKeypad=NULL;
 TaskHandle_t taskHandleGameLogic = NULL;
 TaskHandle_t taskHandleGameHardware = NULL;
 TaskHandle_t taskHandleEscreverDisplay = NULL;
+TaskHandle_t taskHandleComunicarAudio = NULL;
 
 QueueHandle_t filaToques = NULL;
 QueueHandle_t filaLEDs = NULL;
@@ -39,6 +40,7 @@ void setup() {
     xTaskCreatePinnedToCore(initDisplay,"Display", 4096, NULL, 1, &taskHandleInitDisplay, 1);
     // xTaskCreatePinnedToCore(initLeds,"LEDs",  2048, NULL, 1, &taskHandleInitLEDs, 1);
     xTaskCreatePinnedToCore(initAudio,"Audio",  4096, NULL, 1, &taskHandleInitAudio, 1);
+    xTaskCreatePinnedToCore(taskAudio,"ComunicarAudio",  4096, NULL, 1, &taskHandleComunicarAudio, 1);
     xTaskCreatePinnedToCore(initKeypad,"Keypad",  2048, NULL, 1, &taskHandleInitKeypad, 0);
     xTaskCreatePinnedToCore(TaskLCD_UI, "UI Display", 4096, NULL, 1, &taskHandleEscreverDisplay, 1);
     xTaskCreatePinnedToCore(initGameHardware, "Game Hardware", 2048, NULL, 1, &taskHandleGameHardware, 1);

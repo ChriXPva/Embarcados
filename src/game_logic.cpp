@@ -2,6 +2,7 @@
 #include "display_ui.h"
 #include "leaderboard.h"
 #include "keyboard.h"
+#include "audio.h"
 
 constexpr int PINS_PADS[4] = {38, 39, 40, 41};
 constexpr int PINS_LEDS[4] = {19, 20, 3, 46};
@@ -11,14 +12,6 @@ static const unsigned long TEMPO_DEBOUNCE_MS = 150;
 
 // Constante para definir a cor (Azul RGB) sem depender do objeto Adafruit_NeoPixel
 static const uint32_t COR_AZUL = 0x0000FF;
-
-// Helper para envio limpo de comandos para a fila de áudio
-static void enviarComandoAudio(AcaoAudio acao, int faixa = 0) {
-    if (filaAudio != NULL) {
-        ComandoAudio cmd = {acao, faixa};
-        xQueueSend(filaAudio, &cmd, pdMS_TO_TICKS(50));
-    }
-}
 
 void IRAM_ATTR ISR_Pad(void* arg) {
     int indicePad = (int)(intptr_t)arg;
@@ -98,14 +91,14 @@ void TaskJogoLogic(void *pvParameters) {
             }
 
             case MENU: {
-                atualizarDisplay("Opcao 1-Jogar", "Opcao 2-Leader");
-                if (xQueueReceive(filaToques, &evento, portMAX_DELAY) == pdTRUE) {
-                    if (evento.indicePad == 0) { 
-                        estadoAtual = REGISTRAR_NOME;
-                    } else if (evento.indicePad == 1) {
-                        estadoAtual = LEADERBOARD;
-                    }
+                atualizarDisplay("1-Jogar", "2-Leaderboard");
+                char tecla = lerTecla();
+                if (tecla == '1') {
+                    estadoAtual = REGISTRAR_NOME;
+                } else if (tecla == '2') {
+                    estadoAtual = LEADERBOARD;
                 }
+                vTaskDelay(pdMS_TO_TICKS(50)); // Evita prender o processador na task
                 break;
             }
             
@@ -127,14 +120,12 @@ void TaskJogoLogic(void *pvParameters) {
                     }
 
                     atualizarDisplay(bufferL1, bufferL2);
-
-                    if (xQueueReceive(filaToques, &evento, portMAX_DELAY) == pdTRUE) {
-                        if (evento.indicePad == 0) { 
-                            posicaoExibicao = (posicaoExibicao + 1) % 6;
-                        } else if (evento.indicePad == 1) { 
-                            sairLeaderboard = true;
-                            estadoAtual = MENU;
-                        }
+                    char tecla = lerTecla(); 
+                    if (tecla == '1') { 
+                        posicaoExibicao = (posicaoExibicao + 1) % 6;
+                    } else if (tecla == '2') { 
+                        sairLeaderboard = true;
+                        estadoAtual = MENU;
                     }
                 }
                 vTaskDelay(pdMS_TO_TICKS(50));
