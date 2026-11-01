@@ -57,11 +57,7 @@ void initGameHardware(void *pvParameters) {
 void TaskJogoLogic(void *pvParameters) {
     // Variáveis de estado do jogo isoladas internamente na Task
     EstadoJogo estadoAtual = INIT;
-    int vidas = 3;
     unsigned long instanteAtivacaoPad = 0;
-    float pontuacaoTotal = 0.0;
-    float somaTemposResposta = 0.0;
-    int totalAcertos = 0;
     const int TOTAL_RODADAS = 10;
     const unsigned long TEMPO_LIMITE_MS = 3000;
 
@@ -83,6 +79,7 @@ void TaskJogoLogic(void *pvParameters) {
                 const EventBits_t bitsEsperados = ALL_INIT_BITS;
                 
                 if ((bits & bitsEsperados) == bitsEsperados) {
+                    vTaskDelay(pdMS_TO_TICKS(3000));
                     carregarLeaderboard(leaderboard, ultimoNomeJogador, &ultimaPontuacao);
                     atualizarDisplay("SISTEMA PRONTO!", "INICIANDO JOGO");
                     vTaskDelay(pdMS_TO_TICKS(1500));
@@ -93,6 +90,7 @@ void TaskJogoLogic(void *pvParameters) {
                     if (!(bits & BIT_INIT_DISPLAY)) { atualizarDisplay("- Display LCD", ""); }
                     if (!(bits & BIT_INIT_KEYPAD))  { atualizarDisplay("- Teclado", ""); }
                     if (!(bits & BIT_INIT_GAME))    { atualizarDisplay("- HARDWARE JOGO", ""); }
+                    if (!(bits & BIT_INIT_AUDIO))   { atualizarDisplay("- DFPlayer Mini", ""); }
                     vTaskDelay(pdMS_TO_TICKS(1000));
                 }
                 vTaskDelay(pdMS_TO_TICKS(500));
@@ -159,10 +157,10 @@ void TaskJogoLogic(void *pvParameters) {
                 }
 
                 // --- RESET DE VARIÁVEIS DA RODADA ---
-                pontuacaoTotal = 0.0;
-                somaTemposResposta = 0.0;
-                totalAcertos = 0;
-                vidas = 3;
+                float pontuacaoTotal = 0.0;
+                float somaTemposResposta = 0.0;
+                int totalAcertos = 0;
+                int vidas = 3;
 
                 for (int rodada = 1; rodada <= TOTAL_RODADAS; rodada++) {
                     snprintf(bufferL1, sizeof(bufferL1), "RODADA %d/%d", rodada, TOTAL_RODADAS);
