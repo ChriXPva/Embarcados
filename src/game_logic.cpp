@@ -3,6 +3,7 @@
 #include "leaderboard.h"
 #include "keyboard.h"
 #include "audio.h"
+#include "beatmapbass.h"
 
 constexpr int PINS_PADS[4] = {38, 39, 40, 41};
 constexpr int PINS_LEDS[4] = {19, 20, 3, 46};
@@ -52,7 +53,7 @@ void TaskJogoLogic(void *pvParameters) {
     EstadoJogo estadoAtual = INIT;
     unsigned long instanteAtivacaoPad = 0;
     const int TOTAL_RODADAS = 10;
-    const unsigned long TEMPO_LIMITE_MS = 3000;
+    const unsigned long TEMPO_LIMITE_MS = 1500;
 
     Jogador leaderboard[5];
     char ultimoNomeJogador[11] = "---";
@@ -142,6 +143,7 @@ void TaskJogoLogic(void *pvParameters) {
             case JOGANDO: {
                 atualizarDisplay("O JOGO IRA", "COMECAR");
                 vTaskDelay(pdMS_TO_TICKS(2500));
+                enviarComandoAudio(AUDIO_PLAY,2);
 
                 if (filaToques != NULL) {
                     xQueueReset(filaToques);
@@ -152,54 +154,61 @@ void TaskJogoLogic(void *pvParameters) {
                 float somaTemposResposta = 0.0;
                 int totalAcertos = 0;
                 int vidas = 3;
+                uint32_t inicioJogo = millis();
 
-                for (int rodada = 1; rodada <= TOTAL_RODADAS; rodada++) {
-                    snprintf(bufferL1, sizeof(bufferL1), "RODADA %d/%d", rodada, TOTAL_RODADAS);
-                    atualizarDisplay(bufferL1, "PREPARE-SE!");
+                for (size_t rodada = 0; rodada < BEAT_COUNT; rodada++) {
+                // 1. Aguarda o momento correto do beatmap para acender a nota
+                uint32_t tempoAlvoMs = BEAT_MAP_MS[rodada];
+    
+                while ((millis() - inicioJogo) < tempoAlvoMs) {
+                    // Aguarda de forma não-bloqueante para o FreeRTOS
+                    vTaskDelay(pdMS_TO_TICKS(1));
+                }
 
-                    int indicePadAtual = random(0, 4);
+                // 2. Seleciona o Pad aleatório e acende o LED
+                int indicePadAtual = random(0, 4);
+                digitalWrite(PINS_LEDS[indicePadAtual], HIGH);
+    
+                snprintf(bufferL1, sizeof(bufferL1), "NOTA %d/%d", (int)(rodada + 1), (int)BEAT_COUNT);
+                atualizarDisplay(bufferL1, "PRESSIONE!");
+    
+                instanteAtivacaoPad = millis();
 
-                    digitalWrite(PINS_LEDS[indicePadAtual], HIGH);
-                    atualizarDisplay(bufferL1, "PRESSIONE O PAD!");
-                    instanteAtivacaoPad = millis();
-
-                    if (xQueueReceive(filaToques, &evento, pdMS_TO_TICKS(TEMPO_LIMITE_MS)) == pdTRUE) {
-                        if (evento.indicePad == indicePadAtual) {
-                            float tempoReacao = (float)(evento.instanteToque - instanteAtivacaoPad);
-                            float pontoDaVez = 1000.0 - (0.5 * tempoReacao);
-                            if (pontoDaVez < 0) pontoDaVez = 0;
-
-                            pontuacaoTotal += pontoDaVez;
-                            somaTemposResposta += tempoReacao;
-                            totalAcertos++;
-                            
-                            snprintf(bufferL2, sizeof(bufferL2), "+%.0f Pts (%.0fms)", pontoDaVez, tempoReacao);
-                            atualizarDisplay("ACERTOU! :)", bufferL2);
-                        } else {
-                            atualizarDisplay("ERROU! :(", "PAD INCORRETO!");
-                        }
-                    } else {
-                        atualizarDisplay("TEMPO ESGOTADO!", "MUITO LENTO!");
+                 // 3. Define a janela de tempo de resposta até a próxima nota (ou no máximo TEMPO_LIMITE_MS)
+                uint32_t tempoJanelaMs = TEMPO_LIMITE_MS;
+                if (rodada + 1 < BEAT_COUNT) {
+                    uint32_t deltaProximaNota = BEAT_MAP_MS[rodada + 1] - tempoAlvoMs;
+                    if (deltaProximaNota < tempoJanelaMs) {
+                        tempoJanelaMs = deltaProximaNota; // Encurta o tempo de resposta se as notas forem muito rápidas
                     }
-
-                    digitalWrite(PINS_LEDS[indicePadAtual], LOW);
-                    vTaskDelay(pdMS_TO_TICKS(1000));
                 }
 
-                // Final da Partida
-                snprintf(bufferL1, sizeof(bufferL1), "ACERTOS: %d/%d", totalAcertos, TOTAL_RODADAS);
-                snprintf(bufferL2, sizeof(bufferL2), "TOTAL: %.0f PTS", pontuacaoTotal);
-                atualizarDisplay(bufferL1, bufferL2);
+                // 4. Aguarda a entrada do jogador dentro do tempo limite da nota
+                if (xQueueReceive(filaToques, &evento, pdMS_TO_TICKS(tempoJanelaMs)) == pdTRUE) {
+                    if (evento.indicePad == indicePadAtual) {
+                        float tempoReacao = (float)(evento.instanteToque - instanteAtivacaoPad);
+                        float pontoDaVez = 1000.0 - (0.5 * tempoReacao);
+                        if (pontoDaVez < 0) pontoDaVez = 0;
 
-                atualizarRanking(leaderboard, nomeJogadorAtual, pontuacaoTotal, ultimoNomeJogador, &ultimaPontuacao);
-
-                vTaskDelay(pdMS_TO_TICKS(5000));
-                atualizarDisplay("FIM DE JOGO!", "");
-                vTaskDelay(pdMS_TO_TICKS(1500));
-
-                if (filaToques != NULL) {
-                    xQueueReset(filaToques);
+                        pontuacaoTotal += pontoDaVez;
+                        somaTemposResposta += tempoReacao;
+                        totalAcertos++;
+            
+                        snprintf(bufferL2, sizeof(bufferL2), "+%.0f Pts (%.0fms)", pontoDaVez, tempoReacao);
+                        atualizarDisplay("ACERTOU! :)", bufferL2);
+                    } else {
+                        atualizarDisplay("ERROU! :(", "PAD INCORRETO!");
+                    }
+                } else {
+                    atualizarDisplay("ERROU!", "FORA DO TEMPO!");
                 }
+
+                // 5. Apaga o LED
+                digitalWrite(PINS_LEDS[indicePadAtual], LOW);
+    
+                // Esvazia toques remanescentes da fila para evitar que um toque atrasado compute na próxima nota
+                xQueueReset(filaToques);
+}
 
                 // --- DECISÃO DE REJOGABILIDADE ---
                 atualizarDisplay("Tentar de novo?", "1 - JGR | 2 - MENU");
